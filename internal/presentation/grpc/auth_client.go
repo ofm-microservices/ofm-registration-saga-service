@@ -39,6 +39,18 @@ func (c *authClient) ExistsByEmail(ctx context.Context, email string) (bool, err
 	return response.GetExists(), nil
 }
 
+// VerifyRegistrationEmail verifies the code owned by auth-service.
+func (c *authClient) VerifyRegistrationEmail(ctx context.Context, userID, code string) error {
+	_, err := c.cl.VerifyRegistrationEmail(ctx, &authv1.VerifyRegistrationEmailRequest{UserId: userID, Code: code})
+	return err
+}
+
+// DeactivateRegistrationAuth marks auth data inactive as saga compensation.
+func (c *authClient) DeactivateRegistrationAuth(ctx context.Context, userID string) error {
+	_, err := c.cl.DeactivateRegistrationAuth(ctx, &authv1.DeactivateRegistrationAuthRequest{UserId: userID})
+	return err
+}
+
 // Close closes the underlying auth-service gRPC connection.
 func (c *authClient) Close() error {
 	if c == nil || c.conn == nil {

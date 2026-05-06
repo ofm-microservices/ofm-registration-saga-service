@@ -25,5 +25,8 @@ type Server interface {
 type RegistrationMapper interface {
 	ToStartParams(req *registrationv1.StartRegistrationRequest) domain.StartRegistrationParams
 	ToStartResponse(result *domain.StartRegistrationResult) *registrationv1.StartRegistrationResponse
+	ToVerifyEmailParams(req *registrationv1.VerifyEmailRequest) domain.VerifyEmailParams
+	ToVerifyEmailResponse(result *domain.VerifyEmailResult) *registrationv1.VerifyEmailResponse
+	ToRegistrationStatusResponse(result *domain.RegistrationStatus) *registrationv1.GetRegistrationStatusResponse
 	ToStartError(err error) error
 }

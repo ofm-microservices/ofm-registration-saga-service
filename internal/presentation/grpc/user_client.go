@@ -40,6 +40,18 @@ func (c *userClient) ExistsByUsername(ctx context.Context, username string) (boo
 	return response.GetExists(), nil
 }
 
+// ActivateUser marks the saga-created user profile active.
+func (c *userClient) ActivateUser(ctx context.Context, userID string) error {
+	_, err := c.cl.ActivateUser(ctx, &userv1.ActivateUserRequest{UserId: userID})
+	return err
+}
+
+// DeactivateUser marks the saga-created user profile inactive as compensation.
+func (c *userClient) DeactivateUser(ctx context.Context, userID string) error {
+	_, err := c.cl.DeactivateUser(ctx, &userv1.DeactivateUserRequest{UserId: userID})
+	return err
+}
+
 // Close closes the underlying user-service gRPC connection.
 func (c *userClient) Close() error {
 	if c == nil || c.conn == nil {

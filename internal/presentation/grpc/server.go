@@ -76,3 +76,23 @@ func (s *server) StartRegistration(ctx context.Context, req *registrationv1.Star
 
 	return s.mapr.ToStartResponse(result), nil
 }
+
+// VerifyEmail accepts the user-submitted email verification code.
+func (s *server) VerifyEmail(ctx context.Context, req *registrationv1.VerifyEmailRequest) (*registrationv1.VerifyEmailResponse, error) {
+	result, err := s.svc.VerifyEmail(ctx, s.mapr.ToVerifyEmailParams(req))
+	if err != nil {
+		return nil, s.mapr.ToStartError(err)
+	}
+
+	return s.mapr.ToVerifyEmailResponse(result), nil
+}
+
+// GetRegistrationStatus returns the saga state used before token exchange.
+func (s *server) GetRegistrationStatus(ctx context.Context, req *registrationv1.GetRegistrationStatusRequest) (*registrationv1.GetRegistrationStatusResponse, error) {
+	result, err := s.svc.GetRegistrationStatus(ctx, req.GetSessionId(), req.GetClientId())
+	if err != nil {
+		return nil, s.mapr.ToStartError(err)
+	}
+
+	return s.mapr.ToRegistrationStatusResponse(result), nil
+}

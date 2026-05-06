@@ -152,6 +152,8 @@ func startBootstrapNATSContainer(ctx context.Context, jetstream bool) (testconta
 		AuthEventsStream:               "AUTH_EVENTS",
 		MailEventsStream:               "MAIL_EVENTS",
 		RegistrationCodeSentSubject:    "registration.code.sent",
+		RegistrationCompletedSubject:   "registration.completed",
+		RegistrationFailedSubject:      "registration.failed",
 		UserCreateResultSubject:        "saga.user.create.result",
 		AuthCreatePendingResultSubject: "saga.auth.create_pending_registration.result",
 		MailSendResultSubject:          "mail.send.result",

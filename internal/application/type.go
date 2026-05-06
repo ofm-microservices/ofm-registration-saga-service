@@ -12,6 +12,10 @@ import (
 type RegistrationService interface {
 	// Start creates the saga session and dispatches the first registration slice.
 	Start(ctx context.Context, params domain.StartRegistrationParams) (*domain.StartRegistrationResult, error)
+	// VerifyEmail verifies the emailed code and completes the registration saga.
+	VerifyEmail(ctx context.Context, params domain.VerifyEmailParams) (*domain.VerifyEmailResult, error)
+	// GetRegistrationStatus returns the saga state for token completion.
+	GetRegistrationStatus(ctx context.Context, sessionID, clientID string) (*domain.RegistrationStatus, error)
 	// HandleUserCreateResult advances the saga with the user-service result.
 	HandleUserCreateResult(ctx context.Context, result UserCreateResult) error
 	// HandleAuthCreatePendingResult advances the saga with the auth-service result.
@@ -35,12 +39,16 @@ type Logger = logging.Logger
 // EmailAvailabilityChecker reports whether auth-service already owns an email.
 type EmailAvailabilityChecker interface {
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	VerifyRegistrationEmail(ctx context.Context, userID, code string) error
+	DeactivateRegistrationAuth(ctx context.Context, userID string) error
 }
 
 // UsernameAvailabilityChecker reports whether user-service already owns a
 // username.
 type UsernameAvailabilityChecker interface {
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
+	ActivateUser(ctx context.Context, userID string) error
+	DeactivateUser(ctx context.Context, userID string) error
 }
 
 // RegistrationMessageMapper translates the registration application state into
@@ -49,6 +57,8 @@ type RegistrationMessageMapper interface {
 	ToUserCreateCommandPayload(session domain.Session, firstName, surname string) ([]byte, error)
 	ToAuthCreatePendingCommandPayload(session domain.Session, email, passwordHash string) ([]byte, error)
 	ToCodeSentEventPayload(result MailSendResult) ([]byte, error)
+	ToRegistrationCompletedEventPayload(session domain.Session) ([]byte, error)
+	ToRegistrationFailedEventPayload(session domain.Session, reason string) ([]byte, error)
 	ToIncompleteConflictResult(emailSession, usernameSession *domain.Session) *domain.StartRegistrationResult
 	ToCompletedConflictResult(emailTaken, usernameTaken bool) *domain.StartRegistrationResult
 }
@@ -78,6 +88,7 @@ type AuthCreatePendingCommand struct {
 	ClientID     string `json:"client_id"`
 	UserID       string `json:"user_id"`
 	Email        string `json:"email"`
+	Username     string `json:"username"`
 	PasswordHash string `json:"password_hash"`
 }
 
