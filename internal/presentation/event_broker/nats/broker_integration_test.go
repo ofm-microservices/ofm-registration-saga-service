@@ -508,6 +508,8 @@ func startBrokerNATSContainer(ctx context.Context) (testcontainers.Container, co
 		AuthEventsStream:               "AUTH_EVENTS",
 		MailEventsStream:               "MAIL_EVENTS",
 		RegistrationCodeSentSubject:    "registration.code.sent",
+		RegistrationCompletedSubject:   "registration.completed",
+		RegistrationFailedSubject:      "registration.failed",
 		UserCreateSubject:              "saga.user.create",
 		UserCreateResultSubject:        "saga.user.create.result",
 		AuthCreatePendingSubject:       "saga.auth.create_pending_registration",
@@ -531,6 +533,8 @@ func uniqueBrokerConfig(base config.NATSConfig) config.NATSConfig {
 	cfg.AuthEventsStream += "_" + suffix
 	cfg.MailEventsStream += "_" + suffix
 	cfg.RegistrationCodeSentSubject += "." + suffix
+	cfg.RegistrationCompletedSubject += "." + suffix
+	cfg.RegistrationFailedSubject += "." + suffix
 	cfg.UserCreateSubject += "." + suffix
 	cfg.UserCreateResultSubject += "." + suffix
 	cfg.AuthCreatePendingSubject += "." + suffix

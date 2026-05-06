@@ -40,6 +40,7 @@ func (stubSessionRepo) GetByUsername(context.Context, string) (*domain.Session, 
 	return nil, nil
 }
 func (stubSessionRepo) UpdateStatus(context.Context, string, string) error { return nil }
+func (stubSessionRepo) ClaimCompleted(context.Context, string) (bool, error) { return false, nil }
 
 type stubStepRepo struct{}
 
@@ -53,15 +54,27 @@ func (stubStepRepo) UpdateStatus(context.Context, string, string, string) error 
 type stubEmailChecker struct{}
 
 func (stubEmailChecker) ExistsByEmail(context.Context, string) (bool, error) { return false, nil }
+func (stubEmailChecker) VerifyRegistrationEmail(context.Context, string, string) error {
+	return nil
+}
+func (stubEmailChecker) DeactivateRegistrationAuth(context.Context, string) error { return nil }
 
 type stubUsernameChecker struct{}
 
 func (stubUsernameChecker) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
+func (stubUsernameChecker) ActivateUser(context.Context, string) error { return nil }
+func (stubUsernameChecker) DeactivateUser(context.Context, string) error { return nil }
 
 type stubRegistrationService struct{}
 
 func (stubRegistrationService) Start(context.Context, domain.StartRegistrationParams) (*domain.StartRegistrationResult, error) {
 	return &domain.StartRegistrationResult{}, nil
+}
+func (stubRegistrationService) VerifyEmail(context.Context, domain.VerifyEmailParams) (*domain.VerifyEmailResult, error) {
+	return &domain.VerifyEmailResult{}, nil
+}
+func (stubRegistrationService) GetRegistrationStatus(context.Context, string, string) (*domain.RegistrationStatus, error) {
+	return &domain.RegistrationStatus{}, nil
 }
 func (stubRegistrationService) HandleUserCreateResult(context.Context, app.UserCreateResult) error {
 	return nil
@@ -114,6 +127,8 @@ var _ = Describe("fx providers and invokes", func() {
 				AuthEventsStream:               "AUTH_EVENTS",
 				MailEventsStream:               "MAIL_EVENTS",
 				RegistrationCodeSentSubject:    "registration.code.sent",
+				RegistrationCompletedSubject:   "registration.completed",
+				RegistrationFailedSubject:      "registration.failed",
 				UserCreateSubject:              "saga.user.create",
 				UserCreateResultSubject:        "saga.user.create.result",
 				AuthCreatePendingSubject:       "saga.auth.create_pending_registration",
@@ -390,6 +405,8 @@ func startFXNATSContainer(ctx context.Context) (testcontainers.Container, config
 		AuthEventsStream:               "AUTH_EVENTS",
 		MailEventsStream:               "MAIL_EVENTS",
 		RegistrationCodeSentSubject:    "registration.code.sent",
+		RegistrationCompletedSubject:   "registration.completed",
+		RegistrationFailedSubject:      "registration.failed",
 		UserCreateSubject:              "saga.user.create",
 		UserCreateResultSubject:        "saga.user.create.result",
 		AuthCreatePendingSubject:       "saga.auth.create_pending_registration",

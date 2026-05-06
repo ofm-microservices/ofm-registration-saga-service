@@ -8,12 +8,14 @@ import (
 
 type registrationMessageMapper struct{}
 
+var jsonMarshal = json.Marshal
+
 func newRegistrationMessageMapper() RegistrationMessageMapper {
 	return &registrationMessageMapper{}
 }
 
 func (m *registrationMessageMapper) ToUserCreateCommandPayload(session domain.Session, firstName, surname string) ([]byte, error) {
-	payload, err := json.Marshal(UserCreateCommand{
+	payload, err := jsonMarshal(UserCreateCommand{
 		SessionID: session.SessionID,
 		UserID:    session.UserID,
 		Username:  session.Username,
@@ -21,29 +23,30 @@ func (m *registrationMessageMapper) ToUserCreateCommandPayload(session domain.Se
 		LastName:  surname,
 	})
 	if err != nil {
-		return nil, WrapPublishUserCreateCommandError(err)
+		return nil, ErrPublishUserCreateCommand
 	}
 
 	return payload, nil
 }
 
 func (m *registrationMessageMapper) ToAuthCreatePendingCommandPayload(session domain.Session, email, passwordHash string) ([]byte, error) {
-	payload, err := json.Marshal(AuthCreatePendingCommand{
+	payload, err := jsonMarshal(AuthCreatePendingCommand{
 		SessionID:    session.SessionID,
 		ClientID:     session.ClientID,
 		UserID:       session.UserID,
 		Email:        email,
+		Username:     session.Username,
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
-		return nil, WrapPublishAuthCreateCommandError(err)
+		return nil, ErrPublishAuthCreateCommand
 	}
 
 	return payload, nil
 }
 
 func (m *registrationMessageMapper) ToCodeSentEventPayload(result MailSendResult) ([]byte, error) {
-	payload, err := json.Marshal(struct {
+	payload, err := jsonMarshal(struct {
 		SessionID string `json:"session_id"`
 		ClientID  string `json:"client_id"`
 		UserID    string `json:"user_id"`
@@ -57,7 +60,51 @@ func (m *registrationMessageMapper) ToCodeSentEventPayload(result MailSendResult
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 	if err != nil {
-		return nil, WrapPublishCodeSentEventError(err)
+		return nil, ErrPublishCodeSentEvent
+	}
+
+	return payload, nil
+}
+
+func (m *registrationMessageMapper) ToRegistrationCompletedEventPayload(session domain.Session) ([]byte, error) {
+	payload, err := jsonMarshal(struct {
+		SessionID string `json:"session_id"`
+		ClientID  string `json:"client_id"`
+		UserID    string `json:"user_id"`
+		Status    string `json:"status"`
+		Timestamp string `json:"timestamp"`
+	}{
+		SessionID: session.SessionID,
+		ClientID:  session.ClientID,
+		UserID:    session.UserID,
+		Status:    domain.SessionStatusCompleted,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return nil, ErrPublishRegistrationCompletedEvent
+	}
+
+	return payload, nil
+}
+
+func (m *registrationMessageMapper) ToRegistrationFailedEventPayload(session domain.Session, reason string) ([]byte, error) {
+	payload, err := jsonMarshal(struct {
+		SessionID string `json:"session_id"`
+		ClientID  string `json:"client_id"`
+		UserID    string `json:"user_id"`
+		Status    string `json:"status"`
+		Error     string `json:"error"`
+		Timestamp string `json:"timestamp"`
+	}{
+		SessionID: session.SessionID,
+		ClientID:  session.ClientID,
+		UserID:    session.UserID,
+		Status:    domain.SessionStatusFailed,
+		Error:     reason,
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return nil, ErrPublishRegistrationFailedEvent
 	}
 
 	return payload, nil

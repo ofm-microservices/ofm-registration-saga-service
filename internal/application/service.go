@@ -116,7 +116,7 @@ func (s *registrationService) HandleUserCreateResult(ctx context.Context, result
 		return err
 	}
 	if sessionStatus != "" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, sessionStatus)
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	return s.syncSessionStatus(ctx, result.SessionID)
@@ -140,7 +140,7 @@ func (s *registrationService) HandleAuthCreatePendingResult(ctx context.Context,
 		return err
 	}
 	if sessionStatus != "" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, sessionStatus)
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyMailSendVerificationCode, domain.StepStatusInProgress); err != nil {
@@ -166,7 +166,7 @@ func (s *registrationService) HandleMailSendResult(ctx context.Context, result M
 		return err
 	}
 	if result.Status != "success" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, domain.SessionStatusFailed)
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	payload, err := s.mapr.ToCodeSentEventPayload(result)
@@ -190,7 +190,7 @@ func (s *registrationService) syncSessionStatus(ctx context.Context, sessionID s
 	allCompleted := true
 	for _, step := range steps {
 		if step.Status == domain.StepStatusFailed {
-			return s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusFailed)
+			return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
 		}
 		if step.Status != domain.StepStatusCompleted {
 			allCompleted = false
@@ -226,4 +226,38 @@ func (s *registrationService) lookupCompletedConflict(ctx context.Context, email
 		return nil, err
 	}
 	return s.mapr.ToCompletedConflictResult(emailTaken, usernameTaken), nil
+}
+
+func (s *registrationService) compensateRegistrationFailure(ctx context.Context, sessionID, userID, reason string) error {
+	session, err := s.sessions.GetByID(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if userID == "" {
+		userID = session.UserID
+	}
+
+	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusFailed); err != nil {
+		return err
+	}
+
+	if userID != "" {
+		if err := s.usernameChecker.DeactivateUser(ctx, userID); err != nil {
+			s.log.Error("compensate user failed", logging.String("user_id", userID), logging.Err(err))
+		}
+		if err := s.emailChecker.DeactivateRegistrationAuth(ctx, userID); err != nil {
+			s.log.Error("compensate auth failed", logging.String("user_id", userID), logging.Err(err))
+		}
+	}
+
+	payload, err := s.mapr.ToRegistrationFailedEventPayload(*session, reason)
+	if err != nil {
+		s.log.Error("build registration failed event failed", logging.String("session_id", sessionID), logging.Err(err))
+		return nil
+	}
+	if err := s.broker.Publish(ctx, s.cfg.RegistrationFailedSubject, payload); err != nil {
+		s.log.Error("publish registration failed event failed", logging.String("session_id", sessionID), logging.Err(err))
+	}
+
+	return nil
 }

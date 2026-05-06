@@ -11,7 +11,7 @@ import (
 func hashStartPassword(password string) (string, error) {
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", WrapHashPasswordError(err)
+		return "", ErrHashPassword
 	}
 
 	return string(passwordHash), nil

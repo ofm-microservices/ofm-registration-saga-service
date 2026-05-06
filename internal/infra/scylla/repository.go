@@ -186,6 +186,37 @@ func (r *sessionRepository) UpdateStatus(ctx context.Context, sessionID, status 
 	return nil
 }
 
+func (r *sessionRepository) ClaimCompleted(ctx context.Context, sessionID string) (bool, error) {
+	session, err := r.GetByID(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+
+	now := time.Now().UTC()
+	var currentStatus string
+	applied, err := r.db.Query(
+		claimCompletedSessionQuery,
+		domain.SessionStatusTokensClaimed,
+		now,
+		sessionID,
+		domain.SessionStatusCompleted,
+	).WithContext(ctx).ScanCAS(&currentStatus)
+	if err != nil {
+		return false, WrapUpdateSessionStatusError(err)
+	}
+	if !applied {
+		return false, nil
+	}
+
+	if err := r.db.Query(updateSessionByEmailStatusQuery, domain.SessionStatusTokensClaimed, now, session.Email).WithContext(ctx).Exec(); err != nil {
+		return false, WrapUpdateSessionStatusError(err)
+	}
+	if err := r.db.Query(updateSessionByUsernameStatusQuery, domain.SessionStatusTokensClaimed, now, session.Username).WithContext(ctx).Exec(); err != nil {
+		return false, WrapUpdateSessionStatusError(err)
+	}
+	return true, nil
+}
+
 func (r *stepRepository) Create(ctx context.Context, step domain.Step) (*domain.Step, error) {
 	now := time.Now().UTC()
 	row := model.StepRow{

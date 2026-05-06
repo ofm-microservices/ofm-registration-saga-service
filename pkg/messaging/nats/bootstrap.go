@@ -31,7 +31,7 @@ func EnsureStream(cfg config.NATSConfig, log logging.Logger) error {
 
 	streamCfg := &nats.StreamConfig{
 		Name:      cfg.RegistrationEventsStream,
-		Subjects:  []string{cfg.RegistrationCodeSentSubject},
+		Subjects:  []string{cfg.RegistrationCodeSentSubject, cfg.RegistrationCompletedSubject, cfg.RegistrationFailedSubject},
 		Storage:   nats.FileStorage,
 		Retention: nats.LimitsPolicy,
 		Replicas:  1,

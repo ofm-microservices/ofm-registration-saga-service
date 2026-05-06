@@ -42,9 +42,11 @@ var _ = Describe("RegistrationService", func() {
 		usernameChecker = NewMockUsernameAvailabilityChecker(ctrl)
 		mapr = NewMockRegistrationMessageMapper(ctrl)
 		natsCfg = config.NATSConfig{
-			UserCreateSubject:           "saga.user.create",
-			AuthCreatePendingSubject:    "saga.auth.create_pending",
-			RegistrationCodeSentSubject: "registration.code.sent",
+			UserCreateSubject:            "saga.user.create",
+			AuthCreatePendingSubject:     "saga.auth.create_pending",
+			RegistrationCodeSentSubject:  "registration.code.sent",
+			RegistrationCompletedSubject: "registration.completed",
+			RegistrationFailedSubject:    "registration.failed",
 		}
 
 		var err error
@@ -358,11 +360,15 @@ var _ = Describe("RegistrationService", func() {
 
 		It("marks the session failed on non-success status", func() {
 			svc := newService()
+			svc.mapr = mapr
 
-			gomock.InOrder(
-				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyUserCreateProfile, domain.StepStatusFailed).Return(nil),
-				sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil),
-			)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyUserCreateProfile, domain.StepStatusFailed).Return(nil)
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", UserID: "user-1"}, nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), "user-1").Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), "user-1").Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(gomock.Any(), gomock.Any()).Return([]byte(`{"status":"failed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationFailedSubject, gomock.Any()).Return(nil)
 
 			Expect(svc.HandleUserCreateResult(context.Background(), UserCreateResult{
 				SessionID: "session-1",
@@ -401,11 +407,15 @@ var _ = Describe("RegistrationService", func() {
 
 		It("marks the session failed on non-success status", func() {
 			svc := newService()
+			svc.mapr = mapr
 
-			gomock.InOrder(
-				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyAuthCreatePending, domain.StepStatusFailed).Return(nil),
-				sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil),
-			)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyAuthCreatePending, domain.StepStatusFailed).Return(nil)
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", UserID: "user-1"}, nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), "user-1").Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), "user-1").Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(gomock.Any(), gomock.Any()).Return([]byte(`{"status":"failed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationFailedSubject, gomock.Any()).Return(nil)
 
 			Expect(svc.HandleAuthCreatePendingResult(context.Background(), AuthCreatePendingResult{
 				SessionID: "session-1",
@@ -461,11 +471,15 @@ var _ = Describe("RegistrationService", func() {
 
 		It("marks the session failed when mail delivery fails", func() {
 			svc := newService()
+			svc.mapr = mapr
 
-			gomock.InOrder(
-				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyMailSendVerificationCode, domain.StepStatusFailed).Return(nil),
-				sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil),
-			)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyMailSendVerificationCode, domain.StepStatusFailed).Return(nil)
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", UserID: "user-1"}, nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), "user-1").Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), "user-1").Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(gomock.Any(), gomock.Any()).Return([]byte(`{"status":"failed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationFailedSubject, gomock.Any()).Return(nil)
 
 			Expect(svc.HandleMailSendResult(context.Background(), MailSendResult{
 				SessionID: "session-1",
@@ -506,11 +520,17 @@ var _ = Describe("RegistrationService", func() {
 	Describe("syncSessionStatus", func() {
 		It("marks the session failed when any step failed", func() {
 			svc := newService()
+			svc.mapr = mapr
 
 			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return([]domain.Step{
 				{StepKey: domain.StepKeyUserCreateProfile, Status: domain.StepStatusFailed},
 			}, nil)
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", UserID: "user-1"}, nil)
 			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), "user-1").Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), "user-1").Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(gomock.Any(), gomock.Any()).Return([]byte(`{"status":"failed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationFailedSubject, gomock.Any()).Return(nil)
 
 			Expect(svc.syncSessionStatus(context.Background(), "session-1")).To(Succeed())
 		})
@@ -532,6 +552,373 @@ var _ = Describe("RegistrationService", func() {
 			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return(nil, errors.New("list failed"))
 
 			Expect(svc.syncSessionStatus(context.Background(), "session-1")).To(MatchError("list failed"))
+		})
+	})
+
+	Describe("VerifyEmail", func() {
+		It("validates request fields", func() {
+			svc := newService()
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{})
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidSessionID))
+
+			result, err = svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{SessionID: "session-1"})
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidClientID))
+
+			result, err = svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{SessionID: "session-1", ClientID: "client-1"})
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidVerificationCode))
+		})
+
+		It("returns session lookup and client mismatch errors", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(nil, errors.New("db failed"))
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: " session-1 ",
+				ClientID:  "client-1",
+				Code:      "123456",
+			})
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError("db failed"))
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "other-client",
+				Status:    domain.SessionStatusCodeSent,
+			}, nil)
+
+			result, err = svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Code:      "123456",
+			})
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrClientMismatch))
+		})
+
+		It("returns completed sessions without starting verification", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Status:    domain.SessionStatusCompleted,
+			}, nil)
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Code:      "123456",
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(domain.SessionStatusCompleted))
+		})
+
+		It("rejects sessions that are not ready for email verification", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Status:    domain.SessionStatusStarted,
+			}, nil)
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Code:      "123456",
+			})
+
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidStatus))
+		})
+
+		It("creates verification steps, updates the session, and completes registration asynchronously", func() {
+			svc := newService()
+			svc.mapr = mapr
+
+			session := &domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				UserID:    "user-1",
+				Status:    domain.SessionStatusCodeSent,
+			}
+			done := make(chan struct{})
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(session, nil)
+			steps.EXPECT().Create(gomock.Any(), domain.Step{SessionID: "session-1", StepKey: domain.StepKeyVerifyEmailCode, Status: domain.StepStatusInProgress}).Return(&domain.Step{}, nil)
+			steps.EXPECT().Create(gomock.Any(), domain.Step{SessionID: "session-1", StepKey: domain.StepKeyActivateUser, Status: domain.StepStatusPending}).Return(&domain.Step{}, nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusVerifyingEmail).Return(nil)
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusCompleted).Return(nil)
+			mapr.EXPECT().ToRegistrationCompletedEventPayload(*session).Return([]byte(`{"status":"completed"}`), nil)
+			broker.EXPECT().
+				Publish(gomock.Any(), natsCfg.RegistrationCompletedSubject, []byte(`{"status":"completed"}`)).
+				DoAndReturn(func(context.Context, string, []byte) error {
+					close(done)
+					return nil
+				})
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Code:      " 123456 ",
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(domain.SessionStatusVerifyingEmail))
+			Eventually(done).Should(BeClosed())
+		})
+
+		It("returns setup failures before async verification starts", func() {
+			svc := newService()
+			session := &domain.Session{SessionID: "session-1", ClientID: "client-1", Status: domain.SessionStatusCodeSent}
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(session, nil)
+			steps.EXPECT().Create(gomock.Any(), domain.Step{SessionID: "session-1", StepKey: domain.StepKeyVerifyEmailCode, Status: domain.StepStatusInProgress}).Return(nil, errors.New("step failed"))
+
+			result, err := svc.VerifyEmail(context.Background(), domain.VerifyEmailParams{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Code:      "123456",
+			})
+
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError("step failed"))
+		})
+	})
+
+	Describe("GetRegistrationStatus", func() {
+		It("validates request fields and client ownership", func() {
+			svc := newService()
+
+			statusResult, err := svc.GetRegistrationStatus(context.Background(), "", "client-1")
+			Expect(statusResult).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidSessionID))
+
+			statusResult, err = svc.GetRegistrationStatus(context.Background(), "session-1", "")
+			Expect(statusResult).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrInvalidClientID))
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", ClientID: "other-client"}, nil)
+			statusResult, err = svc.GetRegistrationStatus(context.Background(), "session-1", "client-1")
+			Expect(statusResult).To(BeNil())
+			Expect(err).To(MatchError(domain.ErrClientMismatch))
+		})
+
+		It("claims completed sessions once and reports already claimed sessions", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				UserID:    "user-1",
+				Status:    domain.SessionStatusCompleted,
+			}, nil)
+			sessions.EXPECT().ClaimCompleted(gomock.Any(), "session-1").Return(true, nil)
+
+			result, err := svc.GetRegistrationStatus(context.Background(), "session-1", "client-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(domain.SessionStatusCompleted))
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-2").Return(&domain.Session{
+				SessionID: "session-2",
+				ClientID:  "client-1",
+				UserID:    "user-1",
+				Status:    domain.SessionStatusCompleted,
+			}, nil)
+			sessions.EXPECT().ClaimCompleted(gomock.Any(), "session-2").Return(false, nil)
+
+			result, err = svc.GetRegistrationStatus(context.Background(), "session-2", "client-1")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(domain.SessionStatusTokensClaimed))
+		})
+
+		It("returns non-completed session state without claiming tokens", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				UserID:    "user-1",
+				Status:    domain.SessionStatusVerifyingEmail,
+			}, nil)
+
+			result, err := svc.GetRegistrationStatus(context.Background(), " session-1 ", " client-1 ")
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Status).To(Equal(domain.SessionStatusVerifyingEmail))
+		})
+
+		It("returns token-claim failures", func() {
+			svc := newService()
+
+			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Status:    domain.SessionStatusCompleted,
+			}, nil)
+			sessions.EXPECT().ClaimCompleted(gomock.Any(), "session-1").Return(false, errors.New("claim failed"))
+
+			result, err := svc.GetRegistrationStatus(context.Background(), "session-1", "client-1")
+
+			Expect(result).To(BeNil())
+			Expect(err).To(MatchError("claim failed"))
+		})
+	})
+
+	Describe("completeEmailVerification", func() {
+		expectFailureEvent := func(session domain.Session, reason string, stepKey string) {
+			steps.EXPECT().UpdateStatus(gomock.Any(), session.SessionID, stepKey, domain.StepStatusFailed).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), session.SessionID, domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), session.UserID).Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), session.UserID).Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(session, reason).Return([]byte(`{"status":"failed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationFailedSubject, []byte(`{"status":"failed"}`)).Return(nil)
+		}
+
+		It("compensates when auth email verification fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(errors.New("bad code"))
+			expectFailureEvent(session, "bad code", domain.StepKeyVerifyEmailCode)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("compensates when updating the verify-email step fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(errors.New("verify step failed"))
+			expectFailureEvent(session, "verify step failed", domain.StepKeyVerifyEmailCode)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("compensates when activation state transitions fail", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(errors.New("activation status failed"))
+			expectFailureEvent(session, "activation status failed", domain.StepKeyActivateUser)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("compensates when activating the user fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(errors.New("activate failed"))
+			expectFailureEvent(session, "activate failed", domain.StepKeyActivateUser)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("compensates when completing the activation step fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusCompleted).Return(errors.New("complete activate failed"))
+			expectFailureEvent(session, "complete activate failed", domain.StepKeyActivateUser)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("compensates when completing the session fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusCompleted).Return(errors.New("complete session failed"))
+			expectFailureEvent(session, "complete session failed", domain.StepKeyActivateUser)
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("stops when completed-event payload mapping fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusCompleted).Return(nil)
+			mapr.EXPECT().ToRegistrationCompletedEventPayload(session).Return(nil, errors.New("marshal failed"))
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("logs completed-event publish failures without failing compensation", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusActivatingUser).Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusInProgress).Return(nil)
+			usernameChecker.EXPECT().ActivateUser(gomock.Any(), "user-1").Return(nil)
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyActivateUser, domain.StepStatusCompleted).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusCompleted).Return(nil)
+			mapr.EXPECT().ToRegistrationCompletedEventPayload(session).Return([]byte(`{"status":"completed"}`), nil)
+			broker.EXPECT().Publish(gomock.Any(), natsCfg.RegistrationCompletedSubject, []byte(`{"status":"completed"}`)).Return(errors.New("publish failed"))
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
+		})
+
+		It("stops failure event publishing when failed-event mapping fails", func() {
+			svc := newService()
+			svc.mapr = mapr
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			emailChecker.EXPECT().VerifyRegistrationEmail(gomock.Any(), "user-1", "123456").Return(errors.New("bad code"))
+			steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyVerifyEmailCode, domain.StepStatusFailed).Return(nil)
+			sessions.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.SessionStatusFailed).Return(nil)
+			usernameChecker.EXPECT().DeactivateUser(gomock.Any(), "user-1").Return(nil)
+			emailChecker.EXPECT().DeactivateRegistrationAuth(gomock.Any(), "user-1").Return(nil)
+			mapr.EXPECT().ToRegistrationFailedEventPayload(session, "bad code").Return(nil, errors.New("marshal failed"))
+
+			svc.completeEmailVerification(context.Background(), session, "123456")
 		})
 	})
 
@@ -561,6 +948,15 @@ var _ = Describe("RegistrationService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(string(codeSentPayload)).To(ContainSubstring(`"status":"code_sent"`))
 
+			completedPayload, err := m.ToRegistrationCompletedEventPayload(session)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(completedPayload)).To(ContainSubstring(`"status":"completed"`))
+
+			failedPayload, err := m.ToRegistrationFailedEventPayload(session, "bad code")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(failedPayload)).To(ContainSubstring(`"status":"failed"`))
+			Expect(string(failedPayload)).To(ContainSubstring(`"error":"bad code"`))
+
 			Expect(m.ToIncompleteConflictResult(
 				&domain.Session{Status: domain.SessionStatusStarted},
 				nil,
@@ -569,15 +965,46 @@ var _ = Describe("RegistrationService", func() {
 			Expect(m.ToCompletedConflictResult(false, false)).To(BeNil())
 			Expect(m.ToCompletedConflictResult(true, false).ConflictState).To(Equal(domain.AvailabilityStateCompleted))
 		})
+
+		It("maps marshal failures to publish errors", func() {
+			previousMarshal := jsonMarshal
+			defer func() { jsonMarshal = previousMarshal }()
+
+			jsonMarshal = func(any) ([]byte, error) {
+				return nil, errors.New("marshal failed")
+			}
+
+			m := newRegistrationMessageMapper()
+			session := domain.Session{SessionID: "session-1", ClientID: "client-1", UserID: "user-1"}
+
+			payload, err := m.ToUserCreateCommandPayload(session, "Alex", "Doe")
+			Expect(payload).To(BeNil())
+			Expect(err).To(MatchError(ErrPublishUserCreateCommand))
+
+			payload, err = m.ToAuthCreatePendingCommandPayload(session, "alex@example.com", "hash")
+			Expect(payload).To(BeNil())
+			Expect(err).To(MatchError(ErrPublishAuthCreateCommand))
+
+			payload, err = m.ToCodeSentEventPayload(MailSendResult{SessionID: "session-1"})
+			Expect(payload).To(BeNil())
+			Expect(err).To(MatchError(ErrPublishCodeSentEvent))
+
+			payload, err = m.ToRegistrationCompletedEventPayload(session)
+			Expect(payload).To(BeNil())
+			Expect(err).To(MatchError(ErrPublishRegistrationCompletedEvent))
+
+			payload, err = m.ToRegistrationFailedEventPayload(session, "failed")
+			Expect(payload).To(BeNil())
+			Expect(err).To(MatchError(ErrPublishRegistrationFailedEvent))
+		})
 	})
 
-	Describe("error wrappers", func() {
-		It("wraps application helper failures", func() {
-			cause := errors.New("boom")
-			Expect(WrapHashPasswordError(cause)).To(MatchError(ContainSubstring("hash password")))
-			Expect(WrapPublishUserCreateCommandError(cause)).To(MatchError(ContainSubstring("publish user create command")))
-			Expect(WrapPublishAuthCreateCommandError(cause)).To(MatchError(ContainSubstring("publish auth create pending registration command")))
-			Expect(WrapPublishCodeSentEventError(cause)).To(MatchError(ContainSubstring("publish registration code sent event")))
+	Describe("application errors", func() {
+		It("uses reusable sentinels", func() {
+			Expect(ErrHashPassword).To(MatchError("hash password failed"))
+			Expect(ErrPublishUserCreateCommand).To(MatchError("publish user create command failed"))
+			Expect(ErrPublishAuthCreateCommand).To(MatchError("publish auth create pending registration command failed"))
+			Expect(ErrPublishCodeSentEvent).To(MatchError("publish registration code sent event failed"))
 		})
 	})
 
