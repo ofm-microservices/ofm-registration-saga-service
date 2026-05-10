@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ofm-microseervices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -127,6 +128,9 @@ var _ = Describe("RegistrationService", func() {
 			Expect(input.firstName).To(Equal("Alex"))
 			Expect(input.surname).To(Equal("Doe"))
 			Expect(input.clientID).NotTo(BeEmpty())
+			parsed, err := uuid.Parse(input.clientID)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(parsed.Version()).To(Equal(uuid.Version(7)))
 		})
 	})
 
@@ -199,6 +203,12 @@ var _ = Describe("RegistrationService", func() {
 				DoAndReturn(func(_ context.Context, session domain.Session) (*domain.Session, error) {
 					Expect(session.SessionID).NotTo(BeEmpty())
 					Expect(session.UserID).NotTo(BeEmpty())
+					sessionID, err := uuid.Parse(session.SessionID)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(sessionID.Version()).To(Equal(uuid.Version(7)))
+					userID, err := uuid.Parse(session.UserID)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(userID.Version()).To(Equal(uuid.Version(7)))
 					Expect(session.ClientID).To(Equal("client-1"))
 					Expect(session.Status).To(Equal(domain.SessionStatusStarted))
 					return &session, nil

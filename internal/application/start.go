@@ -38,7 +38,7 @@ func normalizeStartInput(params domain.StartRegistrationParams) (startInput, err
 		return startInput{}, domain.ErrInvalidPassword
 	}
 	if input.clientID == "" {
-		input.clientID = uuid.NewString()
+		input.clientID = uuid.Must(uuid.NewV7()).String()
 	}
 
 	return input, nil
@@ -58,9 +58,9 @@ func (s *registrationService) lookupStartConflict(ctx context.Context, email, us
 
 func (s *registrationService) createStartSession(ctx context.Context, input startInput) (domain.Session, error) {
 	session := domain.Session{
-		SessionID: uuid.NewString(),
+		SessionID: uuid.Must(uuid.NewV7()).String(),
 		ClientID:  input.clientID,
-		UserID:    uuid.NewString(),
+		UserID:    uuid.Must(uuid.NewV7()).String(),
 		Email:     input.email,
 		Username:  input.username,
 		Status:    domain.SessionStatusStarted,
