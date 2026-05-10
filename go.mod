@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.47.0
-	github.com/ofm-microseervices/ofm-common v0.0.0
+	github.com/ofm-microservices/ofm-common v0.0.0
 	github.com/onsi/ginkgo/v2 v2.27.1
 	github.com/onsi/gomega v1.38.2
 	github.com/testcontainers/testcontainers-go v0.42.0
@@ -90,4 +90,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/ofm-microseervices/ofm-common => ../ofm-common
+replace github.com/ofm-microservices/ofm-common => ../ofm-common

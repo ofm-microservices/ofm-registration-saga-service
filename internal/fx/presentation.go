@@ -2,7 +2,7 @@ package appfx
 
 import (
 	"context"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/config"
 	app "registration-saga-service/internal/application"
 	eventbroker "registration-saga-service/internal/presentation/event_broker"

@@ -3,8 +3,8 @@ package grpc
 import (
 	"context"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	authv1 "github.com/ofm-microseervices/ofm-common/proto/auth/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	authv1 "github.com/ofm-microservices/ofm-common/proto/auth/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )

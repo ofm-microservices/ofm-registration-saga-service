@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/internal/domain"
 )
 

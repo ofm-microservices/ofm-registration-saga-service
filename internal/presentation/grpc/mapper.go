@@ -1,8 +1,8 @@
 package grpc
 
 import (
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	registrationv1 "github.com/ofm-microseervices/ofm-common/proto/registration/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"registration-saga-service/internal/domain"
 
 	"google.golang.org/grpc/codes"

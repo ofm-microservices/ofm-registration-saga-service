@@ -2,8 +2,8 @@ package grpc
 
 import (
 	"context"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	registrationv1 "github.com/ofm-microseervices/ofm-common/proto/registration/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	app "registration-saga-service/internal/application"
 	"registration-saga-service/internal/domain"
 )
