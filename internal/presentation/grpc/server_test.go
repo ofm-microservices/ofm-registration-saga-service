@@ -290,7 +290,7 @@ var _ = Describe("GRPC", func() {
 		})
 
 		It("constructs the auth-service client and closes it", func() {
-			client, err := NewAuthClient("127.0.0.1:9091", logger)
+			client, err := NewAuthClient("127.0.0.1:9501", logger)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(client.Close()).To(Succeed())
 		})
@@ -314,7 +314,7 @@ var _ = Describe("GRPC", func() {
 		})
 
 		It("constructs the user-service client and closes it", func() {
-			client, err := NewUserClient("127.0.0.1:9092", logger)
+			client, err := NewUserClient("127.0.0.1:9502", logger)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(client.Close()).To(Succeed())
 		})

@@ -39,7 +39,7 @@ func (stubSessionRepo) GetByEmail(context.Context, string) (*domain.Session, err
 func (stubSessionRepo) GetByUsername(context.Context, string) (*domain.Session, error) {
 	return nil, nil
 }
-func (stubSessionRepo) UpdateStatus(context.Context, string, string) error { return nil }
+func (stubSessionRepo) UpdateStatus(context.Context, string, string) error   { return nil }
 func (stubSessionRepo) ClaimCompleted(context.Context, string) (bool, error) { return false, nil }
 
 type stubStepRepo struct{}
@@ -62,8 +62,8 @@ func (stubEmailChecker) DeactivateRegistrationAuth(context.Context, string) erro
 type stubUsernameChecker struct{}
 
 func (stubUsernameChecker) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
-func (stubUsernameChecker) ActivateUser(context.Context, string) error { return nil }
-func (stubUsernameChecker) DeactivateUser(context.Context, string) error { return nil }
+func (stubUsernameChecker) ActivateUser(context.Context, string) error             { return nil }
+func (stubUsernameChecker) DeactivateUser(context.Context, string) error           { return nil }
 
 type stubRegistrationService struct{}
 
@@ -135,8 +135,8 @@ var _ = Describe("fx providers and invokes", func() {
 				AuthCreatePendingResultSubject: "saga.auth.create_pending_registration.result",
 				MailSendResultSubject:          "mail.send.result",
 			},
-			AuthService: config.AuthServiceConfig{Address: "127.0.0.1:9091"},
-			UserService: config.UserServiceConfig{Address: "127.0.0.1:9092"},
+			AuthService: config.AuthServiceConfig{Address: "127.0.0.1:9501"},
+			UserService: config.UserServiceConfig{Address: "127.0.0.1:9502"},
 		}
 
 		lc = fxtest.NewLifecycle(GinkgoT())
@@ -154,8 +154,8 @@ var _ = Describe("fx providers and invokes", func() {
 		env := map[string]string{
 			"NATS_URL":             "nats://127.0.0.1:4222",
 			"SCYLLA_HOSTS":         "127.0.0.1",
-			"AUTH_SERVICE_ADDRESS": "127.0.0.1:9091",
-			"USER_SERVICE_ADDRESS": "127.0.0.1:9092",
+			"AUTH_SERVICE_ADDRESS": "127.0.0.1:9501",
+			"USER_SERVICE_ADDRESS": "127.0.0.1:9502",
 		}
 
 		for key, value := range env {
@@ -174,7 +174,7 @@ var _ = Describe("fx providers and invokes", func() {
 		loaded, err := ProvideConfig()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loaded.NATS.URL).To(Equal("nats://127.0.0.1:4222"))
-		Expect(loaded.AuthService.Address).To(Equal("127.0.0.1:9091"))
+		Expect(loaded.AuthService.Address).To(Equal("127.0.0.1:9501"))
 	})
 
 	It("provides a logger", func() {

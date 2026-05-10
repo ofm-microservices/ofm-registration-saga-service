@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
 	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"net"
 	"registration-saga-service/config"
@@ -30,7 +31,7 @@ func NewServer(svc RegistrationService, cfg config.GRPCConfig, log Logger) (Serv
 		return nil, ErrNilLogger
 	}
 
-	grpcSrv := grpc.NewServer()
+	grpcSrv := grpc.NewServer(grpc.UnaryInterceptor(metrics.UnaryServerInterceptor()))
 	s := &server{
 		svc:  svc,
 		cfg:  cfg,

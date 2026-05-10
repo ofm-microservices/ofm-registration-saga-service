@@ -9,6 +9,7 @@ import (
 type Config struct {
 	App         AppConfig
 	GRPC        GRPCConfig
+	Metrics     MetricsConfig
 	NATS        NATSConfig
 	Scylla      ScyllaConfig
 	AuthService AuthServiceConfig
