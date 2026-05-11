@@ -8,31 +8,40 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 )
 
 type sessionRepository struct {
-	db *gocql.Session
+	db  *gocql.Session
+	log logging.Logger
 }
 
 type stepRepository struct {
-	db *gocql.Session
+	db  *gocql.Session
+	log logging.Logger
 }
 
 // NewSessionRepository constructs the Scylla-backed registration session
 // repository.
-func NewSessionRepository(db *gocql.Session) (domain.SessionRepository, error) {
+func NewSessionRepository(db *gocql.Session, log logging.Logger) (domain.SessionRepository, error) {
 	if db == nil {
 		return nil, errors.New("scylla session is nil")
 	}
-	return &sessionRepository{db: db}, nil
+	if log == nil {
+		return nil, ErrNilLogger
+	}
+	return &sessionRepository{db: db, log: log.With(logging.String("module", "scylla-session-repository"))}, nil
 }
 
 // NewStepRepository constructs the Scylla-backed registration step repository.
-func NewStepRepository(db *gocql.Session) (domain.StepRepository, error) {
+func NewStepRepository(db *gocql.Session, log logging.Logger) (domain.StepRepository, error) {
 	if db == nil {
 		return nil, errors.New("scylla session is nil")
 	}
-	return &stepRepository{db: db}, nil
+	if log == nil {
+		return nil, ErrNilLogger
+	}
+	return &stepRepository{db: db, log: log.With(logging.String("module", "scylla-step-repository"))}, nil
 }
 
 func (r *sessionRepository) Create(ctx context.Context, session domain.Session) (*domain.Session, error) {
@@ -58,6 +67,13 @@ func (r *sessionRepository) Create(ctx context.Context, session domain.Session) 
 		row.CreatedAt,
 		row.UpdatedAt,
 	).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("create registration session failed",
+			logging.Operation("db.registration.session.create"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", row.SessionID),
+			logging.Err(err),
+		)
 		return nil, WrapCreateSessionError(err)
 	}
 
@@ -72,6 +88,14 @@ func (r *sessionRepository) Create(ctx context.Context, session domain.Session) 
 		row.CreatedAt,
 		row.UpdatedAt,
 	).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("create registration session by email failed",
+			logging.Operation("db.registration.session.create_by_email"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", row.SessionID),
+			logging.String("email", row.Email),
+			logging.Err(err),
+		)
 		return nil, WrapCreateSessionError(err)
 	}
 
@@ -86,6 +110,14 @@ func (r *sessionRepository) Create(ctx context.Context, session domain.Session) 
 		row.CreatedAt,
 		row.UpdatedAt,
 	).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("create registration session by username failed",
+			logging.Operation("db.registration.session.create_by_username"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", row.SessionID),
+			logging.String("username", row.Username),
+			logging.Err(err),
+		)
 		return nil, WrapCreateSessionError(err)
 	}
 
@@ -108,6 +140,13 @@ func (r *sessionRepository) GetByID(ctx context.Context, sessionID string) (*dom
 		if errors.Is(err, gocql.ErrNotFound) {
 			return nil, domain.ErrSessionNotFound
 		}
+		r.log.Error("get registration session by id failed",
+			logging.Operation("db.registration.session.get_by_id"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		return nil, WrapGetSessionByIDError(err)
 	}
 
@@ -130,6 +169,13 @@ func (r *sessionRepository) GetByEmail(ctx context.Context, email string) (*doma
 		if errors.Is(err, gocql.ErrNotFound) {
 			return nil, domain.ErrSessionNotFound
 		}
+		r.log.Error("get registration session by email failed",
+			logging.Operation("db.registration.session.get_by_email"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("email", email),
+			logging.Err(err),
+		)
 		return nil, WrapGetSessionByEmailError(err)
 	}
 
@@ -152,6 +198,13 @@ func (r *sessionRepository) GetByUsername(ctx context.Context, username string) 
 		if errors.Is(err, gocql.ErrNotFound) {
 			return nil, domain.ErrSessionNotFound
 		}
+		r.log.Error("get registration session by username failed",
+			logging.Operation("db.registration.session.get_by_username"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("username", username),
+			logging.Err(err),
+		)
 		return nil, WrapGetSessionByUsernameError(err)
 	}
 
@@ -175,12 +228,35 @@ func (r *sessionRepository) UpdateStatus(ctx context.Context, sessionID, status 
 
 	now := time.Now().UTC()
 	if err := r.db.Query(updateSessionStatusQuery, status, now, sessionID).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("update registration session status failed",
+			logging.Operation("db.registration.session.update_status"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		return WrapUpdateSessionStatusError(err)
 	}
 	if err := r.db.Query(updateSessionByEmailStatusQuery, status, now, session.Email).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("update registration session by email status failed",
+			logging.Operation("db.registration.session.update_by_email_status"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.String("email", session.Email),
+			logging.Err(err),
+		)
 		return WrapUpdateSessionStatusError(err)
 	}
 	if err := r.db.Query(updateSessionByUsernameStatusQuery, status, now, session.Username).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("update registration session by username status failed",
+			logging.Operation("db.registration.session.update_by_username_status"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.String("username", session.Username),
+			logging.Err(err),
+		)
 		return WrapUpdateSessionStatusError(err)
 	}
 	return nil
@@ -202,6 +278,13 @@ func (r *sessionRepository) ClaimCompleted(ctx context.Context, sessionID string
 		domain.SessionStatusCompleted,
 	).WithContext(ctx).ScanCAS(&currentStatus)
 	if err != nil {
+		r.log.Error("claim registration session failed",
+			logging.Operation("db.registration.session.claim_completed"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		return false, WrapUpdateSessionStatusError(err)
 	}
 	if !applied {
@@ -209,9 +292,25 @@ func (r *sessionRepository) ClaimCompleted(ctx context.Context, sessionID string
 	}
 
 	if err := r.db.Query(updateSessionByEmailStatusQuery, domain.SessionStatusTokensClaimed, now, session.Email).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("claim registration session by email failed",
+			logging.Operation("db.registration.session.claim_by_email"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.String("email", session.Email),
+			logging.Err(err),
+		)
 		return false, WrapUpdateSessionStatusError(err)
 	}
 	if err := r.db.Query(updateSessionByUsernameStatusQuery, domain.SessionStatusTokensClaimed, now, session.Username).WithContext(ctx).Exec(); err != nil {
+		r.log.Error("claim registration session by username failed",
+			logging.Operation("db.registration.session.claim_by_username"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.String("session_id", sessionID),
+			logging.String("username", session.Username),
+			logging.Err(err),
+		)
 		return false, WrapUpdateSessionStatusError(err)
 	}
 	return true, nil

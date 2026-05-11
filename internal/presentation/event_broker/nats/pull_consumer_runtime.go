@@ -11,6 +11,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/natstrace"
 )
 
 type pullConsumerRuntimeFactory struct{}
@@ -99,11 +100,18 @@ func (r *pullConsumerRuntime) runWorker(ctx context.Context, wg *sync.WaitGroup,
 
 			metrics.Global().IncNATSReceived(r.cfg.Stream, msg.Subject, r.cfg.Durable)
 			started := time.Now()
-			if err := r.handler(ctx, msg.Subject, msg.Data); err != nil {
+			msgCtx := natstrace.ContextFromMessage(ctx, msg)
+			if err := r.handler(msgCtx, msg.Subject, msg.Data); err != nil {
 				metrics.Global().ObserveNATSProcessed(r.cfg.Stream, msg.Subject, r.cfg.Durable, "error", time.Since(started))
 				r.log.Error("message handler failed",
+					logging.Operation("nats.pull_consumer.handle"),
+					logging.Attempt(1),
+					logging.Retryable(true),
+					logging.DurationMS(time.Since(started)),
 					logging.String("subject", msg.Subject),
 					logging.Int("worker_id", workerID),
+					logging.String("stream", r.cfg.Stream),
+					logging.String("durable", r.cfg.Durable),
 					logging.Err(err),
 				)
 				_ = msg.Nak()
@@ -114,7 +122,12 @@ func (r *pullConsumerRuntime) runWorker(ctx context.Context, wg *sync.WaitGroup,
 			metrics.Global().ObserveNATSProcessed(r.cfg.Stream, msg.Subject, r.cfg.Durable, "success", time.Since(started))
 			if err := msg.Ack(); err != nil {
 				r.log.Error("message ack failed",
+					logging.Operation("nats.pull_consumer.ack"),
+					logging.Attempt(1),
+					logging.Retryable(true),
 					logging.String("subject", msg.Subject),
+					logging.String("stream", r.cfg.Stream),
+					logging.String("durable", r.cfg.Durable),
 					logging.Int("worker_id", workerID),
 					logging.Err(err),
 				)
@@ -192,6 +205,7 @@ func (r *pullConsumerRuntime) maybeUpdateAdaptivePlan(state *pullConsumerFetchSt
 	metrics.Global().SetNATSBatchSize(r.cfg.Stream, r.cfg.Subject, r.cfg.Durable, state.batch)
 
 	r.log.Info("adaptive pull plan switched",
+		logging.Operation("nats.pull_consumer.adaptive"),
 		logging.String("subject", r.cfg.Subject),
 		logging.String("durable", r.cfg.Durable),
 		logging.String("tier", state.tier),
@@ -210,6 +224,9 @@ func (r *pullConsumerRuntime) handleFetchError(err error) bool {
 	}
 
 	r.log.Error("pull consumer fetch failed",
+		logging.Operation("nats.pull_consumer.fetch"),
+		logging.Attempt(1),
+		logging.Retryable(true),
 		logging.String("subject", r.cfg.Subject),
 		logging.String("durable", r.cfg.Durable),
 		logging.Err(err),

@@ -6,6 +6,7 @@ import (
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
 	userv1 "github.com/ofm-microservices/ofm-common/proto/user/v1"
+	otelgrpc "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -18,7 +19,12 @@ type userClient struct {
 
 // NewUserClient constructs the outbound user-service query client.
 func NewUserClient(address string, log logging.Logger) (*userClient, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithUnaryInterceptor(metrics.UnaryClientInterceptor()))
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(metrics.UnaryClientInterceptor()),
+	)
 	if err != nil {
 		return nil, err
 	}

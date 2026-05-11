@@ -44,6 +44,6 @@ var _ = Describe("main", func() {
 		main()
 
 		Expect(ran).To(BeTrue())
-		Expect(optionCount).To(Equal(9))
+		Expect(optionCount).To(Equal(10))
 	})
 })

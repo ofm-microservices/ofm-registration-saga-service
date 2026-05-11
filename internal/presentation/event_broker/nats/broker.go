@@ -3,6 +3,7 @@ package nats
 import (
 	"context"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/natstrace"
 	"registration-saga-service/config"
 	eventbroker "registration-saga-service/internal/presentation/event_broker"
 	"time"
@@ -57,12 +58,33 @@ func NewBroker(cfg config.NATSConfig, log logging.Logger) (eventbroker.EventBrok
 
 // Publish sends a message and flushes the connection before returning.
 func (b *natsBroker) Publish(ctx context.Context, subject string, payload []byte) error {
-	b.log.Debug("publishing message", logging.String("subject", subject), logging.Int("bytes", len(payload)))
+	started := time.Now()
+	b.log.Debug("publishing message",
+		logging.Operation("nats.publish"),
+		logging.String("subject", subject),
+		logging.Int("bytes", len(payload)),
+	)
 
-	if err := b.nc.Publish(subject, payload); err != nil {
+	if err := b.nc.PublishMsg(natstrace.NewMessage(ctx, subject, payload)); err != nil {
+		b.log.Error("message publish failed",
+			logging.Operation("nats.publish"),
+			logging.Attempt(1),
+			logging.Retryable(true),
+			logging.DurationMS(time.Since(started)),
+			logging.String("subject", subject),
+			logging.Err(err),
+		)
 		return WrapPublishToNATSError(subject, err)
 	}
 	if err := Flush(ctx, b.nc); err != nil {
+		b.log.Error("message flush failed",
+			logging.Operation("nats.flush"),
+			logging.Attempt(1),
+			logging.Retryable(true),
+			logging.DurationMS(time.Since(started)),
+			logging.String("subject", subject),
+			logging.Err(err),
+		)
 		return WrapFlushNATSPublisherError(err)
 	}
 
@@ -71,15 +93,28 @@ func (b *natsBroker) Publish(ctx context.Context, subject string, payload []byte
 
 // Subscribe registers a push-based NATS subscription for the supplied subject.
 func (b *natsBroker) Subscribe(ctx context.Context, subject string, handler eventbroker.MessageHandler) error {
-	b.log.Info("subscribing to subject", logging.String("subject", subject))
+	b.log.Info("subscribing to subject",
+		logging.Operation("nats.subscribe"),
+		logging.String("subject", subject),
+	)
 
 	_, err := b.nc.Subscribe(subject, func(msg *nats.Msg) {
-		if err := handler(ctx, msg.Subject, msg.Data); err != nil {
-			b.log.Error("message handler failed", logging.String("subject", msg.Subject), logging.Err(err))
+		msgCtx := natstrace.ContextFromMessage(ctx, msg)
+		if err := handler(msgCtx, msg.Subject, msg.Data); err != nil {
+			b.log.Error("message handler failed",
+				logging.Operation("nats.message.handle"),
+				logging.Attempt(1),
+				logging.Retryable(true),
+				logging.String("subject", msg.Subject),
+				logging.Err(err),
+			)
 			return
 		}
 
-		b.log.Info("message handled", logging.String("subject", msg.Subject))
+		b.log.Info("message handled",
+			logging.Operation("nats.message.handle"),
+			logging.String("subject", msg.Subject),
+		)
 	})
 	if err != nil {
 		return WrapSubscribeToNATSError(subject, err)

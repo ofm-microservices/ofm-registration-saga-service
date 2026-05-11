@@ -1,6 +1,12 @@
 package scylla
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrNilLogger reports a missing logger dependency.
+var ErrNilLogger = errors.New("logger is nil")
 
 // WrapCreateSessionError annotates session insert failures.
 func WrapCreateSessionError(err error) error {

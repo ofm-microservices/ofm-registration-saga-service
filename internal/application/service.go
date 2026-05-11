@@ -283,9 +283,19 @@ func (s *registrationService) lookupCompletedConflict(ctx context.Context, email
 
 func (s *registrationService) compensateRegistrationFailure(ctx context.Context, sessionID, userID, reason string) error {
 	metrics.Global().IncSagaCompensationStarted(registrationSagaMetricName)
+	log := logging.WithContext(ctx, s.log)
+	started := time.Now()
 	session, err := s.sessions.GetByID(ctx, sessionID)
 	if err != nil {
 		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+		log.Error("compensation session lookup failed",
+			logging.Operation("saga.registration.compensate"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		return err
 	}
 	if userID == "" {
@@ -294,28 +304,64 @@ func (s *registrationService) compensateRegistrationFailure(ctx context.Context,
 
 	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusFailed); err != nil {
 		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+		log.Error("compensation session update failed",
+			logging.Operation("saga.registration.compensate"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		return err
 	}
 
 	if userID != "" {
 		if err := s.usernameChecker.DeactivateUser(ctx, userID); err != nil {
 			metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
-			s.log.Error("compensate user failed", logging.String("user_id", userID), logging.Err(err))
+			log.Error("compensate user failed",
+				logging.Operation("saga.registration.compensate_user"),
+				logging.Attempt(1),
+				logging.Retryable(true),
+				logging.DurationMS(time.Since(started)),
+				logging.String("user_id", userID),
+				logging.Err(err),
+			)
 		}
 		if err := s.emailChecker.DeactivateRegistrationAuth(ctx, userID); err != nil {
 			metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
-			s.log.Error("compensate auth failed", logging.String("user_id", userID), logging.Err(err))
+			log.Error("compensate auth failed",
+				logging.Operation("saga.registration.compensate_auth"),
+				logging.Attempt(1),
+				logging.Retryable(true),
+				logging.DurationMS(time.Since(started)),
+				logging.String("user_id", userID),
+				logging.Err(err),
+			)
 		}
 	}
 
 	payload, err := s.mapr.ToRegistrationFailedEventPayload(*session, reason)
 	if err != nil {
-		s.log.Error("build registration failed event failed", logging.String("session_id", sessionID), logging.Err(err))
+		log.Error("build registration failed event failed",
+			logging.Operation("saga.registration.build_failed_event"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
 		return nil
 	}
 	if err := s.broker.Publish(ctx, s.cfg.RegistrationFailedSubject, payload); err != nil {
-		s.log.Error("publish registration failed event failed", logging.String("session_id", sessionID), logging.Err(err))
+		log.Error("publish registration failed event failed",
+			logging.Operation("saga.registration.publish_failed_event"),
+			logging.Attempt(1),
+			logging.Retryable(true),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
 		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
 	}
 	metrics.Global().IncSagaFailed(registrationSagaMetricName)

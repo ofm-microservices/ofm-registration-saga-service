@@ -10,6 +10,7 @@ type Config struct {
 	App         AppConfig
 	GRPC        GRPCConfig
 	Metrics     MetricsConfig
+	Tracing     TracingConfig
 	NATS        NATSConfig
 	Scylla      ScyllaConfig
 	AuthService AuthServiceConfig

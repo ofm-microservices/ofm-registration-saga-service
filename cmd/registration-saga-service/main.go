@@ -13,6 +13,7 @@ func main() {
 	runApp(newApp(
 		appfx.ConfigModule,
 		appfx.LoggerModule,
+		appfx.TracingModule,
 		appfx.MetricsModule,
 		appfx.AppModule,
 		appfx.StorageModule,

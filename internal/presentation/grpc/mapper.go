@@ -86,7 +86,12 @@ func (m *registrationMapper) ToStartError(err error) error {
 	case domain.ErrInvalidStatus:
 		return status.Error(codes.FailedPrecondition, "registration is not ready for this operation")
 	default:
-		m.log.Error("registration request failed", logging.Err(err))
+		m.log.Error("registration request failed",
+			logging.Operation("grpc.registration.map_error"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.Err(err),
+		)
 		return status.Error(codes.Internal, "internal server error")
 	}
 }

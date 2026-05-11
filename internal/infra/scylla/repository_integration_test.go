@@ -53,10 +53,10 @@ var _ = Describe("Scylla repositories integration", func() {
 		truncateScyllaTables(repoSuiteSession)
 
 		var err error
-		sessionRepo, err = NewSessionRepository(repoSuiteSession)
+		sessionRepo, err = NewSessionRepository(repoSuiteSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
-		stepRepo, err = NewStepRepository(repoSuiteSession)
+		stepRepo, err = NewStepRepository(repoSuiteSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -136,7 +136,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_create_fail")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(tempSession.Query("DROP TABLE registration_sessions_by_email").Exec()).To(Succeed())
@@ -159,7 +159,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_create_user")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(tempSession.Query("DROP TABLE registration_sessions_by_username").Exec()).To(Succeed())
@@ -182,7 +182,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_update_fail")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		created, err := tempRepo.Create(context.Background(), domain.Session{
@@ -207,7 +207,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_update_user")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		created, err := tempRepo.Create(context.Background(), domain.Session{
@@ -273,9 +273,9 @@ var _ = Describe("Scylla repositories integration", func() {
 		session, err := pkgscylla.ConnectAndEnsureSchema(repoSuiteCfg, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
-		closedSessionRepo, err := NewSessionRepository(session)
+		closedSessionRepo, err := NewSessionRepository(session, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
-		closedStepRepo, err := NewStepRepository(session)
+		closedStepRepo, err := NewStepRepository(session, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		session.Close()

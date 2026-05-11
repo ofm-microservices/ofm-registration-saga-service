@@ -207,11 +207,11 @@ var _ = Describe("fx providers and invokes", func() {
 	})
 
 	It("propagates repository constructor validation", func() {
-		repo, err := ProvideSessionRepository(nil)
+		repo, err := ProvideSessionRepository(nil, logger)
 		Expect(repo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 
-		stepRepo, err := ProvideStepRepository(nil)
+		stepRepo, err := ProvideStepRepository(nil, logger)
 		Expect(stepRepo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 	})
