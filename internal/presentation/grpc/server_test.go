@@ -49,6 +49,10 @@ func (s authQueryClientStub) ExistsByEmail(context.Context, *authv1.ExistsByEmai
 	return &authv1.ExistsByEmailResponse{Exists: s.exists}, nil
 }
 
+func (s authQueryClientStub) GetEmailByUserID(context.Context, *authv1.GetEmailByUserIDRequest, ...grpc.CallOption) (*authv1.GetEmailByUserIDResponse, error) {
+	return &authv1.GetEmailByUserIDResponse{}, s.err
+}
+
 type userQueryClientStub struct {
 	exists bool
 	err    error
