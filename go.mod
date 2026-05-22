@@ -6,7 +6,6 @@ require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/gocql/gocql v1.7.0
 	github.com/google/uuid v1.6.0
-	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.52.0
 	github.com/ofm-microservices/ofm-common v0.0.0
 	github.com/onsi/ginkgo/v2 v2.27.1
