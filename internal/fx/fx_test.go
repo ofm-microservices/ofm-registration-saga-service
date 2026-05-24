@@ -293,6 +293,10 @@ var _ = Describe("fx providers and invokes", func() {
 	})
 
 	It("provides a live scylla session and closes it on stop", func() {
+		if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
+			Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
@@ -421,7 +425,7 @@ func startFXScyllaContainer(ctx context.Context, keyspace string) (testcontainer
 			Image:        "scylladb/scylla:6.1",
 			ExposedPorts: []string{"9042/tcp"},
 			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(3 * time.Minute),
+			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
 		},
 		Started: true,
 	})

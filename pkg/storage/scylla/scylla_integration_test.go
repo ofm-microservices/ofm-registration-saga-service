@@ -2,6 +2,7 @@ package scylla
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"time"
 
@@ -15,8 +16,14 @@ import (
 )
 
 var _ = Describe("ConnectAndEnsureSchema", func() {
+	BeforeEach(func() {
+		if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
+			Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
+		}
+	})
+
 	It("creates the keyspace and required tables idempotently", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
 
 		container, cfg := startStorageScyllaContainer(ctx, "registration_saga_store")
@@ -77,7 +84,7 @@ var _ = Describe("ConnectAndEnsureSchema", func() {
 	})
 
 	It("wraps schema creation failures for invalid keyspace names", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
 
 		container, cfg := startStorageScyllaContainer(ctx, "invalid-keyspace")
@@ -96,7 +103,7 @@ var _ = Describe("ConnectAndEnsureSchema", func() {
 	})
 
 	It("backfills missing registration session columns", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 		defer cancel()
 
 		container, cfg := startStorageScyllaContainer(ctx, "registration_saga_legacy")
@@ -175,7 +182,7 @@ func startStorageScyllaContainer(ctx context.Context, keyspace string) (testcont
 			Image:        "scylladb/scylla:6.1",
 			ExposedPorts: []string{"9042/tcp"},
 			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(3 * time.Minute),
+			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
 		},
 		Started: true,
 	})

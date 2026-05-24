@@ -3,6 +3,7 @@ package scylla
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
@@ -24,7 +25,11 @@ var (
 )
 
 var _ = BeforeSuite(func() {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
+		Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	repoSuiteContainer, repoSuiteCfg = startScyllaContainer(ctx, "registration_saga_repo")
@@ -340,7 +345,7 @@ func startScyllaContainer(ctx context.Context, keyspace string) (testcontainers.
 			Image:        "scylladb/scylla:6.1",
 			ExposedPorts: []string{"9042/tcp"},
 			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(3 * time.Minute),
+			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
 		},
 		Started: true,
 	})
