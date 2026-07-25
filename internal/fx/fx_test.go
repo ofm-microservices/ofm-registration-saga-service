@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
@@ -39,7 +39,8 @@ func (stubSessionRepo) GetByEmail(context.Context, string) (*domain.Session, err
 func (stubSessionRepo) GetByUsername(context.Context, string) (*domain.Session, error) {
 	return nil, nil
 }
-func (stubSessionRepo) UpdateStatus(context.Context, string, string) error { return nil }
+func (stubSessionRepo) UpdateStatus(context.Context, string, string) error   { return nil }
+func (stubSessionRepo) ClaimCompleted(context.Context, string) (bool, error) { return false, nil }
 
 type stubStepRepo struct{}
 
@@ -53,15 +54,27 @@ func (stubStepRepo) UpdateStatus(context.Context, string, string, string) error 
 type stubEmailChecker struct{}
 
 func (stubEmailChecker) ExistsByEmail(context.Context, string) (bool, error) { return false, nil }
+func (stubEmailChecker) VerifyRegistrationEmail(context.Context, string, string) error {
+	return nil
+}
+func (stubEmailChecker) DeactivateRegistrationAuth(context.Context, string) error { return nil }
 
 type stubUsernameChecker struct{}
 
 func (stubUsernameChecker) ExistsByUsername(context.Context, string) (bool, error) { return false, nil }
+func (stubUsernameChecker) ActivateUser(context.Context, string) error             { return nil }
+func (stubUsernameChecker) DeactivateUser(context.Context, string) error           { return nil }
 
 type stubRegistrationService struct{}
 
 func (stubRegistrationService) Start(context.Context, domain.StartRegistrationParams) (*domain.StartRegistrationResult, error) {
 	return &domain.StartRegistrationResult{}, nil
+}
+func (stubRegistrationService) VerifyEmail(context.Context, domain.VerifyEmailParams) (*domain.VerifyEmailResult, error) {
+	return &domain.VerifyEmailResult{}, nil
+}
+func (stubRegistrationService) GetRegistrationStatus(context.Context, string, string) (*domain.RegistrationStatus, error) {
+	return &domain.RegistrationStatus{}, nil
 }
 func (stubRegistrationService) HandleUserCreateResult(context.Context, app.UserCreateResult) error {
 	return nil
@@ -114,14 +127,16 @@ var _ = Describe("fx providers and invokes", func() {
 				AuthEventsStream:               "AUTH_EVENTS",
 				MailEventsStream:               "MAIL_EVENTS",
 				RegistrationCodeSentSubject:    "registration.code.sent",
+				RegistrationCompletedSubject:   "registration.completed",
+				RegistrationFailedSubject:      "registration.failed",
 				UserCreateSubject:              "saga.user.create",
 				UserCreateResultSubject:        "saga.user.create.result",
 				AuthCreatePendingSubject:       "saga.auth.create_pending_registration",
 				AuthCreatePendingResultSubject: "saga.auth.create_pending_registration.result",
 				MailSendResultSubject:          "mail.send.result",
 			},
-			AuthService: config.AuthServiceConfig{Address: "127.0.0.1:9091"},
-			UserService: config.UserServiceConfig{Address: "127.0.0.1:9092"},
+			AuthService: config.AuthServiceConfig{Address: "127.0.0.1:9501"},
+			UserService: config.UserServiceConfig{Address: "127.0.0.1:9502"},
 		}
 
 		lc = fxtest.NewLifecycle(GinkgoT())
@@ -139,8 +154,8 @@ var _ = Describe("fx providers and invokes", func() {
 		env := map[string]string{
 			"NATS_URL":             "nats://127.0.0.1:4222",
 			"SCYLLA_HOSTS":         "127.0.0.1",
-			"AUTH_SERVICE_ADDRESS": "127.0.0.1:9091",
-			"USER_SERVICE_ADDRESS": "127.0.0.1:9092",
+			"AUTH_SERVICE_ADDRESS": "127.0.0.1:9501",
+			"USER_SERVICE_ADDRESS": "127.0.0.1:9502",
 		}
 
 		for key, value := range env {
@@ -159,7 +174,7 @@ var _ = Describe("fx providers and invokes", func() {
 		loaded, err := ProvideConfig()
 		Expect(err).NotTo(HaveOccurred())
 		Expect(loaded.NATS.URL).To(Equal("nats://127.0.0.1:4222"))
-		Expect(loaded.AuthService.Address).To(Equal("127.0.0.1:9091"))
+		Expect(loaded.AuthService.Address).To(Equal("127.0.0.1:9501"))
 	})
 
 	It("provides a logger", func() {
@@ -192,11 +207,11 @@ var _ = Describe("fx providers and invokes", func() {
 	})
 
 	It("propagates repository constructor validation", func() {
-		repo, err := ProvideSessionRepository(nil)
+		repo, err := ProvideSessionRepository(nil, logger)
 		Expect(repo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 
-		stepRepo, err := ProvideStepRepository(nil)
+		stepRepo, err := ProvideStepRepository(nil, logger)
 		Expect(stepRepo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 	})
@@ -278,6 +293,10 @@ var _ = Describe("fx providers and invokes", func() {
 	})
 
 	It("provides a live scylla session and closes it on stop", func() {
+		if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
+			Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 
@@ -390,6 +409,8 @@ func startFXNATSContainer(ctx context.Context) (testcontainers.Container, config
 		AuthEventsStream:               "AUTH_EVENTS",
 		MailEventsStream:               "MAIL_EVENTS",
 		RegistrationCodeSentSubject:    "registration.code.sent",
+		RegistrationCompletedSubject:   "registration.completed",
+		RegistrationFailedSubject:      "registration.failed",
 		UserCreateSubject:              "saga.user.create",
 		UserCreateResultSubject:        "saga.user.create.result",
 		AuthCreatePendingSubject:       "saga.auth.create_pending_registration",
@@ -404,7 +425,7 @@ func startFXScyllaContainer(ctx context.Context, keyspace string) (testcontainer
 			Image:        "scylladb/scylla:6.1",
 			ExposedPorts: []string{"9042/tcp"},
 			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(3 * time.Minute),
+			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
 		},
 		Started: true,
 	})

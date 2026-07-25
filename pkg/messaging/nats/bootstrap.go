@@ -1,7 +1,7 @@
 package nats
 
 import (
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/config"
 	"time"
 
@@ -31,7 +31,7 @@ func EnsureStream(cfg config.NATSConfig, log logging.Logger) error {
 
 	streamCfg := &nats.StreamConfig{
 		Name:      cfg.RegistrationEventsStream,
-		Subjects:  []string{cfg.RegistrationCodeSentSubject},
+		Subjects:  []string{cfg.RegistrationCodeSentSubject, cfg.RegistrationCompletedSubject, cfg.RegistrationFailedSubject},
 		Storage:   nats.FileStorage,
 		Retention: nats.LimitsPolicy,
 		Replicas:  1,

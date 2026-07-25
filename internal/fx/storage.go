@@ -2,7 +2,7 @@ package appfx
 
 import (
 	"context"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/config"
 	scyllastore "registration-saga-service/pkg/storage/scylla"
 

@@ -34,8 +34,8 @@ var _ = Describe("Load", func() {
 		setEnv("GRPC_PORT", "9095")
 		setEnv("NATS_URL", "nats://localhost:4222")
 		setEnv("SCYLLA_HOSTS", "db-1,db-2")
-		setEnv("AUTH_SERVICE_ADDRESS", "127.0.0.1:9091")
-		setEnv("USER_SERVICE_ADDRESS", "127.0.0.1:9092")
+		setEnv("AUTH_SERVICE_ADDRESS", "127.0.0.1:9501")
+		setEnv("USER_SERVICE_ADDRESS", "127.0.0.1:9502")
 
 		cfg, err := Load()
 
@@ -46,8 +46,8 @@ var _ = Describe("Load", func() {
 		Expect(cfg.GRPC.Port).To(Equal(9095))
 		Expect(cfg.NATS.URL).To(Equal("nats://localhost:4222"))
 		Expect(cfg.Scylla.Hosts).To(Equal([]string{"db-1", "db-2"}))
-		Expect(cfg.AuthService.Address).To(Equal("127.0.0.1:9091"))
-		Expect(cfg.UserService.Address).To(Equal("127.0.0.1:9092"))
+		Expect(cfg.AuthService.Address).To(Equal("127.0.0.1:9501"))
+		Expect(cfg.UserService.Address).To(Equal("127.0.0.1:9502"))
 	})
 
 	It("wraps parse failures", func() {

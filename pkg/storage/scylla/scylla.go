@@ -2,7 +2,7 @@ package scylla
 
 import (
 	"fmt"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/config"
 	"strings"
 	"time"

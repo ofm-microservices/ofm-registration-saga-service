@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 	domain "registration-saga-service/internal/domain"
 
-	v1 "github.com/ofm-microseervices/ofm-common/proto/registration/v1"
+	v1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	gomock "go.uber.org/mock/gomock"
 )
 

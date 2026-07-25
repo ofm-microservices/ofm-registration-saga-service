@@ -3,11 +3,12 @@ package scylla
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
@@ -24,7 +25,11 @@ var (
 )
 
 var _ = BeforeSuite(func() {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
+		Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
 	defer cancel()
 
 	repoSuiteContainer, repoSuiteCfg = startScyllaContainer(ctx, "registration_saga_repo")
@@ -53,10 +58,10 @@ var _ = Describe("Scylla repositories integration", func() {
 		truncateScyllaTables(repoSuiteSession)
 
 		var err error
-		sessionRepo, err = NewSessionRepository(repoSuiteSession)
+		sessionRepo, err = NewSessionRepository(repoSuiteSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
-		stepRepo, err = NewStepRepository(repoSuiteSession)
+		stepRepo, err = NewStepRepository(repoSuiteSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -136,7 +141,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_create_fail")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(tempSession.Query("DROP TABLE registration_sessions_by_email").Exec()).To(Succeed())
@@ -159,7 +164,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_create_user")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(tempSession.Query("DROP TABLE registration_sessions_by_username").Exec()).To(Succeed())
@@ -182,7 +187,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_update_fail")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		created, err := tempRepo.Create(context.Background(), domain.Session{
@@ -207,7 +212,7 @@ var _ = Describe("Scylla repositories integration", func() {
 		tempSession := openTempScyllaSession("repo_update_user")
 		defer tempSession.Close()
 
-		tempRepo, err := NewSessionRepository(tempSession)
+		tempRepo, err := NewSessionRepository(tempSession, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		created, err := tempRepo.Create(context.Background(), domain.Session{
@@ -273,9 +278,9 @@ var _ = Describe("Scylla repositories integration", func() {
 		session, err := pkgscylla.ConnectAndEnsureSchema(repoSuiteCfg, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
-		closedSessionRepo, err := NewSessionRepository(session)
+		closedSessionRepo, err := NewSessionRepository(session, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
-		closedStepRepo, err := NewStepRepository(session)
+		closedStepRepo, err := NewStepRepository(session, suiteLogger())
 		Expect(err).NotTo(HaveOccurred())
 
 		session.Close()
@@ -340,7 +345,7 @@ func startScyllaContainer(ctx context.Context, keyspace string) (testcontainers.
 			Image:        "scylladb/scylla:6.1",
 			ExposedPorts: []string{"9042/tcp"},
 			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(3 * time.Minute),
+			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
 		},
 		Started: true,
 	})

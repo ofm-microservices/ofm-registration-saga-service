@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/testcontainers/testcontainers-go"
@@ -152,6 +152,8 @@ func startBootstrapNATSContainer(ctx context.Context, jetstream bool) (testconta
 		AuthEventsStream:               "AUTH_EVENTS",
 		MailEventsStream:               "MAIL_EVENTS",
 		RegistrationCodeSentSubject:    "registration.code.sent",
+		RegistrationCompletedSubject:   "registration.completed",
+		RegistrationFailedSubject:      "registration.failed",
 		UserCreateResultSubject:        "saga.user.create.result",
 		AuthCreatePendingResultSubject: "saga.auth.create_pending_registration.result",
 		MailSendResultSubject:          "mail.send.result",

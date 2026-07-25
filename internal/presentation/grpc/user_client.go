@@ -3,8 +3,10 @@ package grpc
 import (
 	"context"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	userv1 "github.com/ofm-microseervices/ofm-common/proto/user/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
+	userv1 "github.com/ofm-microservices/ofm-common/proto/user/v1"
+	otelgrpc "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -17,7 +19,12 @@ type userClient struct {
 
 // NewUserClient constructs the outbound user-service query client.
 func NewUserClient(address string, log logging.Logger) (*userClient, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(metrics.UnaryClientInterceptor()),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +45,18 @@ func (c *userClient) ExistsByUsername(ctx context.Context, username string) (boo
 	}
 
 	return response.GetExists(), nil
+}
+
+// ActivateUser marks the saga-created user profile active.
+func (c *userClient) ActivateUser(ctx context.Context, userID string) error {
+	_, err := c.cl.ActivateUser(ctx, &userv1.ActivateUserRequest{UserId: userID})
+	return err
+}
+
+// DeactivateUser marks the saga-created user profile inactive as compensation.
+func (c *userClient) DeactivateUser(ctx context.Context, userID string) error {
+	_, err := c.cl.DeactivateUser(ctx, &userv1.DeactivateUserRequest{UserId: userID})
+	return err
 }
 
 // Close closes the underlying user-service gRPC connection.

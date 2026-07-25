@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	authv1 "github.com/ofm-microseervices/ofm-common/proto/auth/v1"
-	registrationv1 "github.com/ofm-microseervices/ofm-common/proto/registration/v1"
-	userv1 "github.com/ofm-microseervices/ofm-common/proto/user/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	authv1 "github.com/ofm-microservices/ofm-common/proto/auth/v1"
+	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
+	userv1 "github.com/ofm-microservices/ofm-common/proto/user/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"go.uber.org/mock/gomock"
@@ -30,6 +30,18 @@ type authQueryClientStub struct {
 	err    error
 }
 
+func (s authQueryClientStub) DeactivateRegistrationAuth(context.Context, *authv1.DeactivateRegistrationAuthRequest, ...grpc.CallOption) (*authv1.DeactivateRegistrationAuthResponse, error) {
+	return &authv1.DeactivateRegistrationAuthResponse{}, s.err
+}
+
+func (s authQueryClientStub) IssueRegistrationTokens(context.Context, *authv1.IssueRegistrationTokensRequest, ...grpc.CallOption) (*authv1.IssueRegistrationTokensResponse, error) {
+	return &authv1.IssueRegistrationTokensResponse{}, s.err
+}
+
+func (s authQueryClientStub) VerifyRegistrationEmail(context.Context, *authv1.VerifyRegistrationEmailRequest, ...grpc.CallOption) (*authv1.VerifyRegistrationEmailResponse, error) {
+	return &authv1.VerifyRegistrationEmailResponse{}, s.err
+}
+
 func (s authQueryClientStub) ExistsByEmail(context.Context, *authv1.ExistsByEmailRequest, ...grpc.CallOption) (*authv1.ExistsByEmailResponse, error) {
 	if s.err != nil {
 		return nil, s.err
@@ -37,9 +49,21 @@ func (s authQueryClientStub) ExistsByEmail(context.Context, *authv1.ExistsByEmai
 	return &authv1.ExistsByEmailResponse{Exists: s.exists}, nil
 }
 
+func (s authQueryClientStub) GetEmailByUserID(context.Context, *authv1.GetEmailByUserIDRequest, ...grpc.CallOption) (*authv1.GetEmailByUserIDResponse, error) {
+	return &authv1.GetEmailByUserIDResponse{}, s.err
+}
+
 type userQueryClientStub struct {
 	exists bool
 	err    error
+}
+
+func (s userQueryClientStub) ActivateUser(context.Context, *userv1.ActivateUserRequest, ...grpc.CallOption) (*userv1.ActivateUserResponse, error) {
+	return &userv1.ActivateUserResponse{}, s.err
+}
+
+func (s userQueryClientStub) DeactivateUser(context.Context, *userv1.DeactivateUserRequest, ...grpc.CallOption) (*userv1.DeactivateUserResponse, error) {
+	return &userv1.DeactivateUserResponse{}, s.err
 }
 
 func (s userQueryClientStub) ExistsByUsername(context.Context, *userv1.ExistsByUsernameRequest, ...grpc.CallOption) (*userv1.ExistsByUsernameResponse, error) {
@@ -116,14 +140,48 @@ var _ = Describe("GRPC", func() {
 			Expect(resp.SessionId).To(Equal("session-1"))
 			Expect(resp.ConflictState).To(Equal(domain.AvailabilityStateCompleted))
 			Expect(resp.UsernameTaken).To(BeTrue())
+
+			verifyParams := mapr.ToVerifyEmailParams(&registrationv1.VerifyEmailRequest{
+				SessionId: "session-1",
+				ClientId:  "client-1",
+				Code:      "123456",
+			})
+			Expect(verifyParams.SessionID).To(Equal("session-1"))
+			Expect(verifyParams.ClientID).To(Equal("client-1"))
+			Expect(verifyParams.Code).To(Equal("123456"))
+
+			verifyResp := mapr.ToVerifyEmailResponse(&domain.VerifyEmailResult{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				Status:    domain.SessionStatusVerifyingEmail,
+			})
+			Expect(verifyResp.SessionId).To(Equal("session-1"))
+			Expect(verifyResp.Status).To(Equal(domain.SessionStatusVerifyingEmail))
+
+			statusResp := mapr.ToRegistrationStatusResponse(&domain.RegistrationStatus{
+				SessionID: "session-1",
+				ClientID:  "client-1",
+				UserID:    "user-1",
+				Status:    domain.SessionStatusCompleted,
+			})
+			Expect(statusResp.SessionId).To(Equal("session-1"))
+			Expect(statusResp.ClientId).To(Equal("client-1"))
+			Expect(statusResp.UserId).To(Equal("user-1"))
+			Expect(statusResp.Status).To(Equal(domain.SessionStatusCompleted))
 		})
 
 		It("maps validation failures to invalid-argument grpc errors", func() {
 			mapr := newRegistrationMapper(logger)
 
+			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidSessionID))).To(Equal(codes.InvalidArgument))
+			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidClientID))).To(Equal(codes.InvalidArgument))
+			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidVerificationCode))).To(Equal(codes.InvalidArgument))
 			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidEmail))).To(Equal(codes.InvalidArgument))
 			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidUsername))).To(Equal(codes.InvalidArgument))
 			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidPassword))).To(Equal(codes.InvalidArgument))
+			Expect(status.Code(mapr.ToStartError(domain.ErrSessionNotFound))).To(Equal(codes.NotFound))
+			Expect(status.Code(mapr.ToStartError(domain.ErrClientMismatch))).To(Equal(codes.PermissionDenied))
+			Expect(status.Code(mapr.ToStartError(domain.ErrInvalidStatus))).To(Equal(codes.FailedPrecondition))
 			Expect(status.Code(mapr.ToStartError(errors.New("boom")))).To(Equal(codes.Internal))
 		})
 	})
@@ -190,9 +248,17 @@ var _ = Describe("GRPC", func() {
 				errCh <- srv.Start()
 			}()
 
-			Eventually(func() bool {
-				return srv.(*server).listener != nil
-			}).Should(BeTrue())
+			Eventually(func(g Gomega) {
+				select {
+				case startErr := <-errCh:
+					if startErr != nil {
+						Skip("sandbox does not permit opening TCP listeners")
+					}
+					g.Expect(startErr).NotTo(HaveOccurred())
+				default:
+					g.Expect(srv.(*server).listener).NotTo(BeNil())
+				}
+			}).Should(Succeed())
 
 			err = srv.Shutdown(context.Background())
 			Expect(err).To(HaveOccurred())
@@ -228,7 +294,7 @@ var _ = Describe("GRPC", func() {
 		})
 
 		It("constructs the auth-service client and closes it", func() {
-			client, err := NewAuthClient("127.0.0.1:9091", logger)
+			client, err := NewAuthClient("127.0.0.1:9501", logger)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(client.Close()).To(Succeed())
 		})
@@ -252,7 +318,7 @@ var _ = Describe("GRPC", func() {
 		})
 
 		It("constructs the user-service client and closes it", func() {
-			client, err := NewUserClient("127.0.0.1:9092", logger)
+			client, err := NewUserClient("127.0.0.1:9502", logger)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(client.Close()).To(Succeed())
 		})

@@ -13,6 +13,8 @@ type NATSConfig struct {
 	AuthEventsStream               string        `env:"NATS_STREAM_AUTH_EVENTS" envDefault:"AUTH_EVENTS"`
 	MailEventsStream               string        `env:"NATS_STREAM_MAIL_EVENTS" envDefault:"MAIL_EVENTS"`
 	RegistrationCodeSentSubject    string        `env:"NATS_SUBJECT_REGISTRATION_CODE_SENT" envDefault:"registration.code.sent"`
+	RegistrationCompletedSubject   string        `env:"NATS_SUBJECT_REGISTRATION_COMPLETED" envDefault:"registration.completed"`
+	RegistrationFailedSubject      string        `env:"NATS_SUBJECT_REGISTRATION_FAILED" envDefault:"registration.failed"`
 	UserCreateSubject              string        `env:"NATS_SUBJECT_SAGA_CREATE_USER" envDefault:"saga.user.create"`
 	UserCreateResultSubject        string        `env:"NATS_SUBJECT_SAGA_CREATE_USER_RESULT" envDefault:"saga.user.create.result"`
 	AuthCreatePendingSubject       string        `env:"NATS_SUBJECT_SAGA_CREATE_PENDING_AUTH" envDefault:"saga.auth.create_pending_registration"`

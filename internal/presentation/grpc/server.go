@@ -3,11 +3,14 @@ package grpc
 import (
 	"context"
 	"fmt"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
-	registrationv1 "github.com/ofm-microseervices/ofm-common/proto/registration/v1"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
+	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"net"
 	"registration-saga-service/config"
+	"time"
 
+	otelgrpc "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -30,7 +33,10 @@ func NewServer(svc RegistrationService, cfg config.GRPCConfig, log Logger) (Serv
 		return nil, ErrNilLogger
 	}
 
-	grpcSrv := grpc.NewServer()
+	grpcSrv := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(metrics.UnaryServerInterceptor()),
+	)
 	s := &server{
 		svc:  svc,
 		cfg:  cfg,
@@ -69,10 +75,61 @@ func (s *server) Shutdown(context.Context) error {
 
 // StartRegistration exposes the registration start use case over gRPC.
 func (s *server) StartRegistration(ctx context.Context, req *registrationv1.StartRegistrationRequest) (*registrationv1.StartRegistrationResponse, error) {
+	started := time.Now()
+	log := logging.WithContext(ctx, s.log)
 	result, err := s.svc.Start(ctx, s.mapr.ToStartParams(req))
 	if err != nil {
+		log.Error("start registration failed",
+			logging.Operation("grpc.registration.start"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("client_id", req.GetClientId()),
+			logging.Err(err),
+		)
 		return nil, s.mapr.ToStartError(err)
 	}
 
 	return s.mapr.ToStartResponse(result), nil
+}
+
+// VerifyEmail accepts the user-submitted email verification code.
+func (s *server) VerifyEmail(ctx context.Context, req *registrationv1.VerifyEmailRequest) (*registrationv1.VerifyEmailResponse, error) {
+	started := time.Now()
+	log := logging.WithContext(ctx, s.log)
+	result, err := s.svc.VerifyEmail(ctx, s.mapr.ToVerifyEmailParams(req))
+	if err != nil {
+		log.Error("verify email failed",
+			logging.Operation("grpc.registration.verify_email"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", req.GetSessionId()),
+			logging.Err(err),
+		)
+		return nil, s.mapr.ToStartError(err)
+	}
+
+	return s.mapr.ToVerifyEmailResponse(result), nil
+}
+
+// GetRegistrationStatus returns the saga state used before token exchange.
+func (s *server) GetRegistrationStatus(ctx context.Context, req *registrationv1.GetRegistrationStatusRequest) (*registrationv1.GetRegistrationStatusResponse, error) {
+	started := time.Now()
+	log := logging.WithContext(ctx, s.log)
+	result, err := s.svc.GetRegistrationStatus(ctx, req.GetSessionId(), req.GetClientId())
+	if err != nil {
+		log.Error("get registration status failed",
+			logging.Operation("grpc.registration.status"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", req.GetSessionId()),
+			logging.String("client_id", req.GetClientId()),
+			logging.Err(err),
+		)
+		return nil, s.mapr.ToStartError(err)
+	}
+
+	return s.mapr.ToRegistrationStatusResponse(result), nil
 }

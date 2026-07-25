@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gocql/gocql"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -16,12 +17,20 @@ func TestRepository(t *testing.T) {
 }
 
 var _ = Describe("Scylla repositories", func() {
+	var logger logging.Logger
+
+	BeforeEach(func() {
+		var err error
+		logger, err = logging.New("registration-saga-service", "test", "debug")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
 	It("validates nil sessions", func() {
-		sessionRepo, err := NewSessionRepository(nil)
+		sessionRepo, err := NewSessionRepository(nil, logger)
 		Expect(sessionRepo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 
-		stepRepo, err := NewStepRepository(nil)
+		stepRepo, err := NewStepRepository(nil, logger)
 		Expect(stepRepo).To(BeNil())
 		Expect(err).To(MatchError("scylla session is nil"))
 	})
@@ -29,11 +38,11 @@ var _ = Describe("Scylla repositories", func() {
 	It("constructs repositories with a session pointer", func() {
 		session := &gocql.Session{}
 
-		sessionRepo, err := NewSessionRepository(session)
+		sessionRepo, err := NewSessionRepository(session, logger)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sessionRepo).NotTo(BeNil())
 
-		stepRepo, err := NewStepRepository(session)
+		stepRepo, err := NewStepRepository(session, logger)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(stepRepo).NotTo(BeNil())
 	})

@@ -6,16 +6,20 @@ import (
 	"go.uber.org/fx"
 )
 
+var newApp = fx.New
+var runApp = (*fx.App).Run
+
 func main() {
-	app := fx.New(
+	runApp(newApp(
 		appfx.ConfigModule,
 		appfx.LoggerModule,
+		appfx.TracingModule,
+		appfx.MetricsModule,
 		appfx.AppModule,
 		appfx.StorageModule,
 		appfx.MessagingModule,
 		appfx.RepoModule,
 		appfx.ServiceModule,
 		appfx.PresentationModule,
-	)
-	app.Run()
+	))
 }

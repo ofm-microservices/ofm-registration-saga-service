@@ -2,10 +2,14 @@ package service
 
 import (
 	"context"
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
 	"registration-saga-service/config"
 	"registration-saga-service/internal/domain"
+	"time"
 )
+
+const registrationSagaMetricName = "registration"
 
 type registrationService struct {
 	sessions        SessionRepository
@@ -63,34 +67,48 @@ func New(
 // Start validates the request, persists the initial saga state, and fan-outs
 // the first commands required to create user and auth data.
 func (s *registrationService) Start(ctx context.Context, params domain.StartRegistrationParams) (*domain.StartRegistrationResult, error) {
+	started := time.Now()
+	status := "success"
+	defer func() {
+		metrics.Global().ObserveSagaStep(registrationSagaMetricName, "start", status, time.Since(started))
+	}()
+
 	input, err := normalizeStartInput(params)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 
 	conflict, err := s.lookupStartConflict(ctx, input.email, input.username)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 	if conflict != nil {
+		metrics.Global().IncSagaFailed(registrationSagaMetricName)
 		return conflict, nil
 	}
 
 	session, err := s.createStartSession(ctx, input)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 	if err := s.createStartSteps(ctx, session.SessionID); err != nil {
+		status = "error"
 		return nil, err
 	}
 
 	passwordHash, err := hashStartPassword(input.password)
 	if err != nil {
+		status = "error"
 		return nil, err
 	}
 
 	go s.dispatchStartCommands(session, input, passwordHash)
 
+	metrics.Global().IncSagaStarted(registrationSagaMetricName)
+	metrics.Global().SetSagaActiveSessions(registrationSagaMetricName, 1)
 	return &domain.StartRegistrationResult{
 		SessionID: session.SessionID,
 		ClientID:  session.ClientID,
@@ -101,22 +119,31 @@ func (s *registrationService) Start(ctx context.Context, params domain.StartRegi
 
 // HandleUserCreateResult records the outcome of the user profile creation step.
 func (s *registrationService) HandleUserCreateResult(ctx context.Context, result UserCreateResult) error {
+	started := time.Now()
+	metricStatus := "success"
+	defer func() {
+		metrics.Global().ObserveSagaStep(registrationSagaMetricName, domain.StepKeyUserCreateProfile, metricStatus, time.Since(started))
+	}()
+
 	if result.SessionID == "" {
+		metricStatus = "error"
 		return domain.ErrInvalidSessionID
 	}
 
-	status := domain.StepStatusCompleted
+	stepStatus := domain.StepStatusCompleted
 	sessionStatus := ""
 	if result.Status != "success" {
-		status = domain.StepStatusFailed
+		stepStatus = domain.StepStatusFailed
 		sessionStatus = domain.SessionStatusFailed
 	}
 
-	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyUserCreateProfile, status); err != nil {
+	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyUserCreateProfile, stepStatus); err != nil {
+		metricStatus = "error"
 		return err
 	}
 	if sessionStatus != "" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, sessionStatus)
+		metricStatus = "error"
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	return s.syncSessionStatus(ctx, result.SessionID)
@@ -125,25 +152,35 @@ func (s *registrationService) HandleUserCreateResult(ctx context.Context, result
 // HandleAuthCreatePendingResult records the auth outcome and activates the mail
 // step when auth creation succeeds.
 func (s *registrationService) HandleAuthCreatePendingResult(ctx context.Context, result AuthCreatePendingResult) error {
+	started := time.Now()
+	metricStatus := "success"
+	defer func() {
+		metrics.Global().ObserveSagaStep(registrationSagaMetricName, domain.StepKeyAuthCreatePending, metricStatus, time.Since(started))
+	}()
+
 	if result.SessionID == "" {
+		metricStatus = "error"
 		return domain.ErrInvalidSessionID
 	}
 
-	status := domain.StepStatusCompleted
+	stepStatus := domain.StepStatusCompleted
 	sessionStatus := ""
 	if result.Status != "success" {
-		status = domain.StepStatusFailed
+		stepStatus = domain.StepStatusFailed
 		sessionStatus = domain.SessionStatusFailed
 	}
 
-	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyAuthCreatePending, status); err != nil {
+	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyAuthCreatePending, stepStatus); err != nil {
+		metricStatus = "error"
 		return err
 	}
 	if sessionStatus != "" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, sessionStatus)
+		metricStatus = "error"
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyMailSendVerificationCode, domain.StepStatusInProgress); err != nil {
+		metricStatus = "error"
 		return err
 	}
 
@@ -153,28 +190,39 @@ func (s *registrationService) HandleAuthCreatePendingResult(ctx context.Context,
 // HandleMailSendResult records the mail outcome and emits the user-facing
 // "code sent" event on success.
 func (s *registrationService) HandleMailSendResult(ctx context.Context, result MailSendResult) error {
+	started := time.Now()
+	metricStatus := "success"
+	defer func() {
+		metrics.Global().ObserveSagaStep(registrationSagaMetricName, domain.StepKeyMailSendVerificationCode, metricStatus, time.Since(started))
+	}()
+
 	if result.SessionID == "" {
+		metricStatus = "error"
 		return domain.ErrInvalidSessionID
 	}
 
-	status := domain.StepStatusCompleted
+	stepStatus := domain.StepStatusCompleted
 	if result.Status != "success" {
-		status = domain.StepStatusFailed
+		stepStatus = domain.StepStatusFailed
 	}
 
-	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyMailSendVerificationCode, status); err != nil {
+	if err := s.steps.UpdateStatus(ctx, result.SessionID, domain.StepKeyMailSendVerificationCode, stepStatus); err != nil {
+		metricStatus = "error"
 		return err
 	}
 	if result.Status != "success" {
-		return s.sessions.UpdateStatus(ctx, result.SessionID, domain.SessionStatusFailed)
+		metricStatus = "error"
+		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
 	payload, err := s.mapr.ToCodeSentEventPayload(result)
 	if err != nil {
+		metricStatus = "error"
 		return err
 	}
 
 	if err := s.broker.Publish(ctx, s.cfg.RegistrationCodeSentSubject, payload); err != nil {
+		metricStatus = "error"
 		return err
 	}
 
@@ -190,7 +238,7 @@ func (s *registrationService) syncSessionStatus(ctx context.Context, sessionID s
 	allCompleted := true
 	for _, step := range steps {
 		if step.Status == domain.StepStatusFailed {
-			return s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusFailed)
+			return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
 		}
 		if step.Status != domain.StepStatusCompleted {
 			allCompleted = false
@@ -200,7 +248,12 @@ func (s *registrationService) syncSessionStatus(ctx context.Context, sessionID s
 		return nil
 	}
 
-	return s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusCodeSent)
+	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusCodeSent); err != nil {
+		return err
+	}
+	metrics.Global().IncSagaCompleted(registrationSagaMetricName)
+	metrics.Global().SetSagaActiveSessions(registrationSagaMetricName, 0)
+	return nil
 }
 
 func (s *registrationService) lookupIncompleteConflict(ctx context.Context, email, username string) (*domain.StartRegistrationResult, error) {
@@ -226,4 +279,94 @@ func (s *registrationService) lookupCompletedConflict(ctx context.Context, email
 		return nil, err
 	}
 	return s.mapr.ToCompletedConflictResult(emailTaken, usernameTaken), nil
+}
+
+func (s *registrationService) compensateRegistrationFailure(ctx context.Context, sessionID, userID, reason string) error {
+	metrics.Global().IncSagaCompensationStarted(registrationSagaMetricName)
+	log := logging.WithContext(ctx, s.log)
+	started := time.Now()
+	session, err := s.sessions.GetByID(ctx, sessionID)
+	if err != nil {
+		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+		log.Error("compensation session lookup failed",
+			logging.Operation("saga.registration.compensate"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
+		return err
+	}
+	if userID == "" {
+		userID = session.UserID
+	}
+
+	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusFailed); err != nil {
+		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+		log.Error("compensation session update failed",
+			logging.Operation("saga.registration.compensate"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
+		return err
+	}
+
+	if userID != "" {
+		if err := s.usernameChecker.DeactivateUser(ctx, userID); err != nil {
+			metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+			log.Error("compensate user failed",
+				logging.Operation("saga.registration.compensate_user"),
+				logging.Attempt(1),
+				logging.Retryable(true),
+				logging.DurationMS(time.Since(started)),
+				logging.String("user_id", userID),
+				logging.Err(err),
+			)
+		}
+		if err := s.emailChecker.DeactivateRegistrationAuth(ctx, userID); err != nil {
+			metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+			log.Error("compensate auth failed",
+				logging.Operation("saga.registration.compensate_auth"),
+				logging.Attempt(1),
+				logging.Retryable(true),
+				logging.DurationMS(time.Since(started)),
+				logging.String("user_id", userID),
+				logging.Err(err),
+			)
+		}
+	}
+
+	payload, err := s.mapr.ToRegistrationFailedEventPayload(*session, reason)
+	if err != nil {
+		log.Error("build registration failed event failed",
+			logging.Operation("saga.registration.build_failed_event"),
+			logging.Attempt(1),
+			logging.Retryable(false),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
+		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+		return nil
+	}
+	if err := s.broker.Publish(ctx, s.cfg.RegistrationFailedSubject, payload); err != nil {
+		log.Error("publish registration failed event failed",
+			logging.Operation("saga.registration.publish_failed_event"),
+			logging.Attempt(1),
+			logging.Retryable(true),
+			logging.DurationMS(time.Since(started)),
+			logging.String("session_id", sessionID),
+			logging.Err(err),
+		)
+		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
+	}
+	metrics.Global().IncSagaFailed(registrationSagaMetricName)
+	metrics.Global().IncSagaCompensationCompleted(registrationSagaMetricName)
+	metrics.Global().SetSagaActiveSessions(registrationSagaMetricName, 0)
+
+	return nil
 }

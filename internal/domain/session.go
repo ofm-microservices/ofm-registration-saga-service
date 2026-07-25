@@ -12,8 +12,17 @@ const (
 	SessionStatusInProgress = "in_progress"
 	// SessionStatusCodeSent marks the first registration slice as successful.
 	SessionStatusCodeSent = "code_sent"
+	// SessionStatusVerifyingEmail marks the session while auth-service checks
+	// the submitted verification code.
+	SessionStatusVerifyingEmail = "verifying_email"
+	// SessionStatusActivatingUser marks the session while user-service activates
+	// the created profile.
+	SessionStatusActivatingUser = "activating_user"
 	// SessionStatusCompleted marks a fully confirmed registration workflow.
 	SessionStatusCompleted = "completed"
+	// SessionStatusTokensClaimed marks a completed registration whose tokens
+	// were already claimed once via the completion endpoint.
+	SessionStatusTokensClaimed = "tokens_claimed"
 	// SessionStatusFailed marks a non-recoverable failure in the current slice.
 	SessionStatusFailed = "failed"
 
@@ -36,6 +45,10 @@ const (
 	StepKeyAuthCreatePending = "auth.create_pending_registration"
 	// StepKeyMailSendVerificationCode identifies verification-code email delivery.
 	StepKeyMailSendVerificationCode = "mail.send_verification_code"
+	// StepKeyVerifyEmailCode identifies the auth-service code verification step.
+	StepKeyVerifyEmailCode = "auth.verify_email_code"
+	// StepKeyActivateUser identifies the user-service activation step.
+	StepKeyActivateUser = "user.activate_profile"
 )
 
 // Session is the persisted write-model snapshot of a registration saga.
@@ -82,6 +95,29 @@ type StartRegistrationResult struct {
 	EmailTaken    bool
 }
 
+// VerifyEmailParams is the command accepted when a user submits the emailed
+// verification code.
+type VerifyEmailParams struct {
+	SessionID string
+	ClientID  string
+	Code      string
+}
+
+// VerifyEmailResult reports that the saga accepted the verification command.
+type VerifyEmailResult struct {
+	SessionID string
+	ClientID  string
+	Status    string
+}
+
+// RegistrationStatus reports the current saga state used before token exchange.
+type RegistrationStatus struct {
+	SessionID string
+	ClientID  string
+	UserID    string
+	Status    string
+}
+
 // SessionRepository persists registration sessions owned by the saga domain.
 type SessionRepository interface {
 	Create(ctx context.Context, session Session) (*Session, error)
@@ -89,6 +125,7 @@ type SessionRepository interface {
 	GetByEmail(ctx context.Context, email string) (*Session, error)
 	GetByUsername(ctx context.Context, username string) (*Session, error)
 	UpdateStatus(ctx context.Context, sessionID, status string) error
+	ClaimCompleted(ctx context.Context, sessionID string) (bool, error)
 }
 
 // StepRepository persists registration step state owned by the saga domain.

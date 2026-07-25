@@ -15,6 +15,10 @@ var (
 	ErrInvalidUsername = errors.New("invalid username")
 	// ErrInvalidPassword reports a password that does not satisfy minimal policy.
 	ErrInvalidPassword = errors.New("invalid password")
+	// ErrInvalidVerificationCode reports a missing email verification code.
+	ErrInvalidVerificationCode = errors.New("invalid verification code")
+	// ErrClientMismatch reports a registration session that belongs to another client.
+	ErrClientMismatch = errors.New("registration client mismatch")
 	// ErrInvalidStatus reports an unsupported session or step status value.
 	ErrInvalidStatus = errors.New("invalid status")
 	// ErrInvalidStepKey reports an unknown orchestration step key.

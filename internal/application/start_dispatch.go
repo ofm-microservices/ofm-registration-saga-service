@@ -4,14 +4,14 @@ import (
 	"context"
 	"registration-saga-service/internal/domain"
 
-	"github.com/ofm-microseervices/ofm-common/pkg/logging"
+	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"golang.org/x/crypto/bcrypt"
 )
 
 func hashStartPassword(password string) (string, error) {
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return "", WrapHashPasswordError(err)
+		return "", ErrHashPassword
 	}
 
 	return string(passwordHash), nil

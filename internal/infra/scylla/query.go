@@ -55,6 +55,13 @@ const (
 		WHERE username = ?
 	`
 
+	claimCompletedSessionQuery = `
+		UPDATE registration_sessions
+		SET status = ?, updated_at = ?
+		WHERE session_id = ?
+		IF status = ?
+	`
+
 	insertStepQuery = `
 		INSERT INTO registration_steps (session_id, step_key, status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?)
