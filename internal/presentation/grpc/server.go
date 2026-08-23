@@ -2,12 +2,14 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
 	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"net"
 	"registration-saga-service/config"
+	domain "registration-saga-service/internal/domain"
 	"time"
 
 	otelgrpc "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -79,7 +81,7 @@ func (s *server) StartRegistration(ctx context.Context, req *registrationv1.Star
 	log := logging.WithContext(ctx, s.log)
 	result, err := s.svc.Start(ctx, s.mapr.ToStartParams(req))
 	if err != nil {
-		log.Error("start registration failed",
+		log.Warn("start registration returned a business condition",
 			logging.Operation("grpc.registration.start"),
 			logging.Attempt(1),
 			logging.Retryable(false),
@@ -99,7 +101,20 @@ func (s *server) VerifyEmail(ctx context.Context, req *registrationv1.VerifyEmai
 	log := logging.WithContext(ctx, s.log)
 	result, err := s.svc.VerifyEmail(ctx, s.mapr.ToVerifyEmailParams(req))
 	if err != nil {
-		log.Error("verify email failed",
+		if errors.Is(err, domain.ErrInvalidStatus) {
+			// The saga may still be waiting for user/auth/mail results. This is
+			// an expected retry state, not an infrastructure failure.
+			log.Info("verify email is pending",
+				logging.Operation("grpc.registration.verify_email"),
+				logging.Attempt(1),
+				logging.Retryable(false),
+				logging.DurationMS(time.Since(started)),
+				logging.String("session_id", req.GetSessionId()),
+				logging.Err(err),
+			)
+			return nil, s.mapr.ToStartError(err)
+		}
+		log.Warn("verify email returned a business condition",
 			logging.Operation("grpc.registration.verify_email"),
 			logging.Attempt(1),
 			logging.Retryable(false),
@@ -119,7 +134,7 @@ func (s *server) GetRegistrationStatus(ctx context.Context, req *registrationv1.
 	log := logging.WithContext(ctx, s.log)
 	result, err := s.svc.GetRegistrationStatus(ctx, req.GetSessionId(), req.GetClientId())
 	if err != nil {
-		log.Error("get registration status failed",
+		log.Warn("get registration status returned a business condition",
 			logging.Operation("grpc.registration.status"),
 			logging.Attempt(1),
 			logging.Retryable(false),

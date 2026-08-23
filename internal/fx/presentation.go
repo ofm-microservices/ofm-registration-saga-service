@@ -6,7 +6,7 @@ import (
 	"registration-saga-service/config"
 	app "registration-saga-service/internal/application"
 	eventbroker "registration-saga-service/internal/presentation/event_broker"
-	events "registration-saga-service/internal/presentation/event_broker/nats"
+	events "registration-saga-service/internal/presentation/event_broker/kafka"
 	grpcserver "registration-saga-service/internal/presentation/grpc"
 
 	"go.uber.org/fx"
@@ -34,7 +34,7 @@ func ProvideResultSubscriber(
 	cfg *config.Config,
 	lg logging.Logger,
 ) (events.ResultSubscriber, error) {
-	return events.NewResultSubscriber(broker, service, cfg.NATS, lg)
+	return events.NewResultSubscriber(broker, service, cfg.Kafka, lg)
 }
 
 // ProvideAuthAvailabilityChecker constructs the gRPC client used to query
@@ -88,7 +88,7 @@ func ProvideGRPCServer(
 	return grpcserver.NewServer(service, cfg.GRPC, lg)
 }
 
-// InvokeSubscribeResults starts background NATS consumers for saga result
+// InvokeSubscribeResults starts background Kafka consumers for saga result
 // subjects.
 func InvokeSubscribeResults(
 	lc fx.Lifecycle,

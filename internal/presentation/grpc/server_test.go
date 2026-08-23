@@ -73,6 +73,18 @@ func (s userQueryClientStub) ExistsByUsername(context.Context, *userv1.ExistsByU
 	return &userv1.ExistsByUsernameResponse{Exists: s.exists}, nil
 }
 
+func (s userQueryClientStub) GetUserPreviewByID(context.Context, *userv1.GetUserPreviewByIDRequest, ...grpc.CallOption) (*userv1.GetUserPreviewByIDResponse, error) {
+	return &userv1.GetUserPreviewByIDResponse{}, s.err
+}
+
+func (s userQueryClientStub) GetUserPreviewByIDNoCache(context.Context, *userv1.GetUserPreviewByIDNoCacheRequest, ...grpc.CallOption) (*userv1.GetUserPreviewByIDNoCacheResponse, error) {
+	return &userv1.GetUserPreviewByIDNoCacheResponse{}, s.err
+}
+
+func (s userQueryClientStub) GetDetailedUserByUsername(context.Context, *userv1.GetDetailedUserByUsernameRequest, ...grpc.CallOption) (*userv1.GetDetailedUserByUsernameResponse, error) {
+	return &userv1.GetDetailedUserByUsernameResponse{}, s.err
+}
+
 var _ = Describe("GRPC", func() {
 	var (
 		ctrl   *gomock.Controller

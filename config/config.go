@@ -9,6 +9,7 @@ type Config struct {
 	Metrics     MetricsConfig
 	Tracing     TracingConfig
 	NATS        NATSConfig
+	Kafka       KafkaConfig
 	Scylla      ScyllaConfig
 	AuthService AuthServiceConfig
 	UserService UserServiceConfig

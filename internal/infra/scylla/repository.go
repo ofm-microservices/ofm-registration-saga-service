@@ -359,7 +359,10 @@ func (r *stepRepository) GetByKey(ctx context.Context, sessionID, stepKey string
 }
 
 func (r *stepRepository) ListBySessionID(ctx context.Context, sessionID string) ([]domain.Step, error) {
-	iter := r.db.Query(listStepsBySessionIDQuery, sessionID).WithContext(ctx).Iter()
+	// Saga completion is derived from all three rows in this partition. A
+	// default ONE read can observe one stale replica immediately after the
+	// result consumers update the steps and leave the session stuck in progress.
+	iter := r.db.Query(listStepsBySessionIDQuery, sessionID).WithContext(ctx).Consistency(gocql.Quorum).Iter()
 	defer iter.Close()
 
 	steps := make([]domain.Step, 0, 3)
@@ -381,7 +384,11 @@ func (r *stepRepository) ListBySessionID(ctx context.Context, sessionID string) 
 }
 
 func (r *stepRepository) UpdateStatus(ctx context.Context, sessionID, stepKey, status string) error {
-	if err := r.db.Query(updateStepStatusQuery, status, time.Now().UTC(), sessionID, stepKey).WithContext(ctx).Exec(); err != nil {
+	query := updateStepStatusQuery
+	if status == domain.StepStatusInProgress {
+		query = updateStepInProgressQuery
+	}
+	if err := r.db.Query(query, status, time.Now().UTC(), sessionID, stepKey).WithContext(ctx).Exec(); err != nil {
 		return WrapUpdateStepStatusError(err)
 	}
 	return nil

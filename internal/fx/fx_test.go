@@ -241,16 +241,13 @@ var _ = Describe("fx providers and invokes", func() {
 		Expect(lc.Stop(context.Background())).To(Succeed())
 	})
 
-	It("propagates nats bootstrap and broker construction failures", func() {
+	It("rejects an empty Kafka broker configuration", func() {
 		badCfg := *cfg
-		badCfg.NATS.URL = "nats://127.0.0.1:1"
-
-		Expect(InvokeEnsureStream(&badCfg, logger)).To(HaveOccurred())
-
-		badCfg.NATS.URL = ""
+		Expect(InvokeEnsureStream(&badCfg, logger)).To(Succeed())
+		badCfg.Kafka.Brokers = nil
 		eventBroker, err := ProvideEventBroker(lc, &badCfg, logger)
 		Expect(eventBroker).To(BeNil())
-		Expect(err).To(MatchError("nats url is empty"))
+		Expect(err).To(MatchError("kafka brokers are empty"))
 	})
 
 	It("propagates scylla open failures", func() {
@@ -271,17 +268,9 @@ var _ = Describe("fx providers and invokes", func() {
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("provides a live event broker and bootstraps streams", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-
-		container, natsCfg := startFXNATSContainer(ctx)
-		defer func() {
-			Expect(container.Terminate(context.Background())).To(Succeed())
-		}()
-
+	It("provides a Kafka event broker without stream bootstrap", func() {
 		goodCfg := *cfg
-		goodCfg.NATS = natsCfg
+		goodCfg.Kafka = config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}, GroupID: "registration-test"}
 
 		Expect(InvokeEnsureStream(&goodCfg, logger)).To(Succeed())
 

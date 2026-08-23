@@ -85,4 +85,10 @@ const (
 		SET status = ?, updated_at = ?
 		WHERE session_id = ? AND step_key = ?
 	`
+	updateStepInProgressQuery = `
+		UPDATE registration_steps
+		SET status = ?, updated_at = ?
+		WHERE session_id = ? AND step_key = ?
+		IF status != 'completed'
+	`
 )

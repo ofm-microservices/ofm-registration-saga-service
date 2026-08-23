@@ -230,22 +230,36 @@ func (s *registrationService) HandleMailSendResult(ctx context.Context, result M
 }
 
 func (s *registrationService) syncSessionStatus(ctx context.Context, sessionID string) error {
-	steps, err := s.steps.ListBySessionID(ctx, sessionID)
-	if err != nil {
-		return err
-	}
+	// Result events are consumed serially. Reconcile briefly so a replica can
+	// expose the just-written step, but never block the consumer for seconds;
+	// the next result event will retry the reconciliation.
+	for attempt := 0; attempt < 3; attempt++ {
+		steps, err := s.steps.ListBySessionID(ctx, sessionID)
+		if err != nil {
+			return err
+		}
 
-	allCompleted := true
-	for _, step := range steps {
-		if step.Status == domain.StepStatusFailed {
-			return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
+		allCompleted := true
+		for _, step := range steps {
+			if step.Status == domain.StepStatusFailed {
+				return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
+			}
+			if step.Status != domain.StepStatusCompleted {
+				allCompleted = false
+			}
 		}
-		if step.Status != domain.StepStatusCompleted {
-			allCompleted = false
+		if allCompleted {
+			s.log.Info("registration steps reconciled",
+				logging.Operation("registration.saga.reconcile"),
+				logging.String("session_id", sessionID),
+				logging.Int("attempt", attempt+1),
+			)
+			break
 		}
-	}
-	if !allCompleted {
-		return nil
+		if attempt == 2 {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusCodeSent); err != nil {

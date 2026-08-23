@@ -15,4 +15,5 @@ type ScyllaConfig struct {
 	MaxWaitSchemaAgreement time.Duration `env:"SCYLLA_MAX_WAIT_SCHEMA_AGREEMENT" envDefault:"30s"`
 	RetryAttempts          int           `env:"SCYLLA_RETRY_ATTEMPTS" envDefault:"20"`
 	RetryBackoff           time.Duration `env:"SCYLLA_RETRY_BACKOFF" envDefault:"2s"`
+	NumConns               int           `env:"SCYLLA_NUM_CONNS" envDefault:"16"`
 }

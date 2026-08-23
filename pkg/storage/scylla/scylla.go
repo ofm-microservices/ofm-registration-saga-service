@@ -8,15 +8,20 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
+	"github.com/ofm-microservices/ofm-common/pkg/observability/cql"
 )
 
 // ConnectAndEnsureSchema opens the Scylla session and idempotently creates the
 // keyspace and tables required by the saga.
 func ConnectAndEnsureSchema(cfg config.ScyllaConfig, log logging.Logger) (*gocql.Session, error) {
 	cluster := gocql.NewCluster(cfg.Hosts...)
+	cluster.QueryObserver = cql.Observer{Service: "registration-saga-service"}
 	cluster.Port = cfg.Port
 	cluster.Timeout = cfg.ConnectTimeout
 	cluster.ConnectTimeout = cfg.ConnectTimeout
+	if cfg.NumConns > 0 {
+		cluster.NumConns = cfg.NumConns
+	}
 	cluster.MaxWaitSchemaAgreement = cfg.MaxWaitSchemaAgreement
 	cluster.Consistency = parseConsistency(cfg.Consistency)
 	if cfg.Username != "" {
@@ -76,7 +81,6 @@ func ConnectAndEnsureSchema(cfg config.ScyllaConfig, log logging.Logger) (*gocql
 		app.Close()
 		return nil, WrapEnsureSchemaError(err)
 	}
-
 	if err := ensureSessionColumns(app, cfg.Keyspace); err != nil {
 		app.Close()
 		return nil, WrapEnsureSchemaError(err)
@@ -128,8 +132,30 @@ func ConnectAndEnsureSchema(cfg config.ScyllaConfig, log logging.Logger) (*gocql
 		return nil, WrapEnsureSchemaError(err)
 	}
 
+	if err := enableRegistrationCDC(app); err != nil {
+		app.Close()
+		return nil, WrapEnsureSchemaError(err)
+	}
+	if err := app.Query(`CREATE TABLE IF NOT EXISTS processed_events (
+		event_id TEXT PRIMARY KEY, event_type TEXT, source_service TEXT,
+		aggregate_type TEXT, aggregate_id TEXT, aggregate_version BIGINT,
+		processed_at TIMESTAMP
+	)`).Exec(); err != nil {
+		app.Close()
+		return nil, WrapEnsureSchemaError(err)
+	}
+
 	log.Info("scylla schema ensured", logging.String("keyspace", cfg.Keyspace))
 	return app, nil
+}
+
+func enableRegistrationCDC(app *gocql.Session) error {
+	for _, table := range []string{"registration_sessions", "registration_sessions_by_email", "registration_sessions_by_username", "registration_steps"} {
+		if err := app.Query(fmt.Sprintf("ALTER TABLE %s WITH cdc = {'enabled': true, 'preimage': 'full', 'postimage': true}", table)).Exec(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parseConsistency(level string) gocql.Consistency {

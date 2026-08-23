@@ -354,7 +354,7 @@ var _ = Describe("RegistrationService", func() {
 
 			gomock.InOrder(
 				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyUserCreateProfile, domain.StepStatusCompleted).Return(nil),
-				steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return([]domain.Step{
+				steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").AnyTimes().Return([]domain.Step{
 					{StepKey: domain.StepKeyUserCreateProfile, Status: domain.StepStatusCompleted},
 					{StepKey: domain.StepKeyAuthCreatePending, Status: domain.StepStatusCompleted},
 					{StepKey: domain.StepKeyMailSendVerificationCode, Status: domain.StepStatusCompleted},
@@ -402,7 +402,7 @@ var _ = Describe("RegistrationService", func() {
 			gomock.InOrder(
 				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyAuthCreatePending, domain.StepStatusCompleted).Return(nil),
 				steps.EXPECT().UpdateStatus(gomock.Any(), "session-1", domain.StepKeyMailSendVerificationCode, domain.StepStatusInProgress).Return(nil),
-				steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return([]domain.Step{
+				steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").AnyTimes().Return([]domain.Step{
 					{StepKey: domain.StepKeyUserCreateProfile, Status: domain.StepStatusCompleted},
 					{StepKey: domain.StepKeyAuthCreatePending, Status: domain.StepStatusCompleted},
 					{StepKey: domain.StepKeyMailSendVerificationCode, Status: domain.StepStatusInProgress},
@@ -532,7 +532,7 @@ var _ = Describe("RegistrationService", func() {
 			svc := newService()
 			svc.mapr = mapr
 
-			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return([]domain.Step{
+			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").AnyTimes().Return([]domain.Step{
 				{StepKey: domain.StepKeyUserCreateProfile, Status: domain.StepStatusFailed},
 			}, nil)
 			sessions.EXPECT().GetByID(gomock.Any(), "session-1").Return(&domain.Session{SessionID: "session-1", UserID: "user-1"}, nil)
@@ -548,7 +548,7 @@ var _ = Describe("RegistrationService", func() {
 		It("does nothing while some steps are still pending", func() {
 			svc := newService()
 
-			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").Return([]domain.Step{
+			steps.EXPECT().ListBySessionID(gomock.Any(), "session-1").AnyTimes().Return([]domain.Step{
 				{StepKey: domain.StepKeyUserCreateProfile, Status: domain.StepStatusCompleted},
 				{StepKey: domain.StepKeyAuthCreatePending, Status: domain.StepStatusPending},
 			}, nil)
