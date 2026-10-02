@@ -1,6 +1,10 @@
 package config
 
-import "github.com/caarlos0/env/v11"
+import (
+	"os"
+
+	"github.com/caarlos0/env/v11"
+)
 
 // Config is the root runtime configuration for registration-saga-service.
 type Config struct {
@@ -10,7 +14,7 @@ type Config struct {
 	Tracing     TracingConfig
 	NATS        NATSConfig
 	Kafka       KafkaConfig
-	Scylla      ScyllaConfig
+	DB          DBConfig `envPrefix:"DB_"`
 	AuthService AuthServiceConfig
 	UserService UserServiceConfig
 }
@@ -21,6 +25,9 @@ func Load() (*Config, error) {
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, WrapParseEnvConfigError(err)
+	}
+	if host := os.Getenv("DB_HOST"); host != "" {
+		cfg.DB.Host = host
 	}
 
 	return cfg, nil

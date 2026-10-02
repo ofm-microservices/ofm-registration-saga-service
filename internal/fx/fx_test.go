@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	. "github.com/onsi/ginkgo/v2"
@@ -153,7 +151,6 @@ var _ = Describe("fx providers and invokes", func() {
 	It("provides config from environment", func() {
 		env := map[string]string{
 			"NATS_URL":             "nats://127.0.0.1:4222",
-			"SCYLLA_HOSTS":         "127.0.0.1",
 			"AUTH_SERVICE_ADDRESS": "127.0.0.1:9501",
 			"USER_SERVICE_ADDRESS": "127.0.0.1:9502",
 		}
@@ -206,16 +203,6 @@ var _ = Describe("fx providers and invokes", func() {
 		Expect(svc).NotTo(BeNil())
 	})
 
-	It("propagates repository constructor validation", func() {
-		repo, err := ProvideSessionRepository(nil, logger)
-		Expect(repo).To(BeNil())
-		Expect(err).To(MatchError("scylla session is nil"))
-
-		stepRepo, err := ProvideStepRepository(nil, logger)
-		Expect(stepRepo).To(BeNil())
-		Expect(err).To(MatchError("scylla session is nil"))
-	})
-
 	It("constructs presentation adapters", func() {
 		service := stubRegistrationService{}
 		broker := &eventBrokerStub{}
@@ -250,24 +237,6 @@ var _ = Describe("fx providers and invokes", func() {
 		Expect(err).To(MatchError("kafka brokers are empty"))
 	})
 
-	It("propagates scylla open failures", func() {
-		badCfg := *cfg
-		badCfg.Scylla = config.ScyllaConfig{
-			Hosts:                  []string{"127.0.0.1"},
-			Port:                   1,
-			Keyspace:               "registration_saga_test",
-			Consistency:            "quorum",
-			ConnectTimeout:         time.Millisecond,
-			MaxWaitSchemaAgreement: time.Millisecond,
-			RetryAttempts:          1,
-			RetryBackoff:           time.Millisecond,
-		}
-
-		session, err := ProvideScyllaSession(lc, &badCfg, logger)
-		Expect(session).To(BeNil())
-		Expect(err).To(HaveOccurred())
-	})
-
 	It("provides a Kafka event broker without stream bootstrap", func() {
 		goodCfg := *cfg
 		goodCfg.Kafka = config.KafkaConfig{Brokers: []string{"127.0.0.1:9092"}, GroupID: "registration-test"}
@@ -277,29 +246,6 @@ var _ = Describe("fx providers and invokes", func() {
 		eventBroker, err := ProvideEventBroker(lc, &goodCfg, logger)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eventBroker).NotTo(BeNil())
-
-		Expect(lc.Stop(context.Background())).To(Succeed())
-	})
-
-	It("provides a live scylla session and closes it on stop", func() {
-		if os.Getenv("RUN_SCYLLA_INTEGRATION") != "1" {
-			Skip("scylla integration tests are opt-in; set RUN_SCYLLA_INTEGRATION=1 to run them")
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
-
-		container, scyllaCfg := startFXScyllaContainer(ctx, "registration_saga_fx")
-		defer func() {
-			Expect(container.Terminate(context.Background())).To(Succeed())
-		}()
-
-		goodCfg := *cfg
-		goodCfg.Scylla = scyllaCfg
-
-		session, err := ProvideScyllaSession(lc, &goodCfg, logger)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(session).NotTo(BeNil())
 
 		Expect(lc.Stop(context.Background())).To(Succeed())
 	})
@@ -405,36 +351,5 @@ func startFXNATSContainer(ctx context.Context) (testcontainers.Container, config
 		AuthCreatePendingSubject:       "saga.auth.create_pending_registration",
 		AuthCreatePendingResultSubject: "saga.auth.create_pending_registration.result",
 		MailSendResultSubject:          "mail.send.result",
-	}
-}
-
-func startFXScyllaContainer(ctx context.Context, keyspace string) (testcontainers.Container, config.ScyllaConfig) {
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "scylladb/scylla:6.1",
-			ExposedPorts: []string{"9042/tcp"},
-			Cmd:          []string{"--smp", "1", "--memory", "512M", "--overprovisioned", "1"},
-			WaitingFor:   wait.ForListeningPort("9042/tcp").WithStartupTimeout(6 * time.Minute),
-		},
-		Started: true,
-	})
-	Expect(err).NotTo(HaveOccurred())
-
-	host, err := container.Host(ctx)
-	Expect(err).NotTo(HaveOccurred())
-	port, err := container.MappedPort(ctx, "9042/tcp")
-	Expect(err).NotTo(HaveOccurred())
-	portNum, err := strconv.Atoi(port.Port())
-	Expect(err).NotTo(HaveOccurred())
-
-	return container, config.ScyllaConfig{
-		Hosts:                  []string{host},
-		Port:                   portNum,
-		Keyspace:               keyspace,
-		Consistency:            "quorum",
-		ConnectTimeout:         10 * time.Second,
-		MaxWaitSchemaAgreement: 30 * time.Second,
-		RetryAttempts:          30,
-		RetryBackoff:           2 * time.Second,
 	}
 }
