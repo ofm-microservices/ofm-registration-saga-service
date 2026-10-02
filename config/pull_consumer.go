@@ -20,6 +20,7 @@ type PullAdaptiveConfig struct {
 // PullConsumerConfig is the normalized runtime view of one JetStream pull
 // consumer.
 type PullConsumerConfig struct {
+	GroupID    string
 	Stream     string
 	Subject    string
 	Durable    string

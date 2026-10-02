@@ -2,34 +2,26 @@ package appfx
 
 import (
 	"context"
+	"github.com/jmoiron/sqlx"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
-	"registration-saga-service/config"
-	scyllastore "registration-saga-service/pkg/storage/scylla"
-
-	"github.com/gocql/gocql"
 	"go.uber.org/fx"
+	"registration-saga-service/config"
+	pkgpostgres "registration-saga-service/pkg/storage/postgres"
 )
 
-// StorageModule provides the primary Scylla session used by saga persistence.
-var StorageModule = fx.Options(
-	fx.Provide(ProvideScyllaSession),
-)
+// StorageModule provides PostgreSQL storage for the registration saga.
+var StorageModule = fx.Options(fx.Provide(ProvidePostgresDB))
 
-// ProvideScyllaSession connects to Scylla, ensures the schema exists, and
-// closes the session on shutdown.
-func ProvideScyllaSession(lc fx.Lifecycle, cfg *config.Config, lg logging.Logger) (*gocql.Session, error) {
-	session, err := scyllastore.ConnectAndEnsureSchema(cfg.Scylla, lg)
-	if err != nil {
-		lg.Error("connect scylla failed", logging.Err(err))
+// ProvidePostgresDB opens the registration PostgreSQL pool after migrations.
+func ProvidePostgresDB(lc fx.Lifecycle, cfg *config.Config, lg logging.Logger) (*sqlx.DB, error) {
+	if err := pkgpostgres.RunMigrations(cfg.DB); err != nil {
 		return nil, err
 	}
-
-	lc.Append(fx.Hook{
-		OnStop: func(ctx context.Context) error {
-			session.Close()
-			return nil
-		},
-	})
-
-	return session, nil
+	db, err := pkgpostgres.Open(cfg.DB)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.Hook{OnStop: func(context.Context) error { return db.Close() }})
+	lg.Info("PostgreSQL connected")
+	return db, nil
 }

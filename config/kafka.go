@@ -9,6 +9,9 @@ type KafkaConfig struct {
 	Password                       string        `env:"KAFKA_LEGACY_NATS_PASSWORD"`
 	Brokers                        []string      `env:"KAFKA_BROKERS" envSeparator:"," envDefault:"127.0.0.1:9092"`
 	GroupID                        string        `env:"KAFKA_REGISTRATION_GROUP_ID" envDefault:"registration-saga-service"`
+	RecoveryTopic                  string        `env:"KAFKA_REGISTRATION_RECOVERY_TOPIC" envDefault:"migration.recovery.commands.registration"`
+	RecoveryGroup                  string        `env:"KAFKA_REGISTRATION_RECOVERY_GROUP" envDefault:"registration-saga-service-recovery"`
+	RecoveryCompletedTopic         string        `env:"KAFKA_REGISTRATION_RECOVERY_COMPLETED_TOPIC" envDefault:"migration.recovery.completed"`
 	UserResultTopic                string        `env:"KAFKA_REGISTRATION_USER_RESULT_TOPIC" envDefault:"saga.user.create.result"`
 	AuthResultTopic                string        `env:"KAFKA_REGISTRATION_AUTH_RESULT_TOPIC" envDefault:"saga.auth.create_pending_registration.result"`
 	MailResultTopic                string        `env:"KAFKA_REGISTRATION_MAIL_RESULT_TOPIC" envDefault:"mail.send.result"`
@@ -16,9 +19,9 @@ type KafkaConfig struct {
 	UserEventsStream               string        `env:"KAFKA_USER_EVENTS_STREAM" envDefault:"USER_EVENTS"`
 	AuthEventsStream               string        `env:"KAFKA_AUTH_EVENTS_STREAM" envDefault:"AUTH_EVENTS"`
 	MailEventsStream               string        `env:"KAFKA_MAIL_EVENTS_STREAM" envDefault:"MAIL_EVENTS"`
-	RegistrationCodeSentSubject    string        `env:"KAFKA_REGISTRATION_CODE_SENT_TOPIC" envDefault:"registration.code.sent"`
-	RegistrationCompletedSubject   string        `env:"KAFKA_REGISTRATION_COMPLETED_TOPIC" envDefault:"registration.completed"`
-	RegistrationFailedSubject      string        `env:"KAFKA_REGISTRATION_FAILED_TOPIC" envDefault:"registration.failed"`
+	RegistrationCodeSentSubject    string        `env:"KAFKA_REGISTRATION_CODE_SENT_TOPIC" envDefault:"migration.registration.code.sent"`
+	RegistrationCompletedSubject   string        `env:"KAFKA_REGISTRATION_COMPLETED_TOPIC" envDefault:"migration.registration.completed"`
+	RegistrationFailedSubject      string        `env:"KAFKA_REGISTRATION_FAILED_TOPIC" envDefault:"migration.registration.failed"`
 	UserCreateSubject              string        `env:"KAFKA_SAGA_USER_CREATE_TOPIC" envDefault:"saga.user.create"`
 	UserCreateResultSubject        string        `env:"KAFKA_REGISTRATION_USER_RESULT_TOPIC" envDefault:"saga.user.create.result"`
 	AuthCreatePendingSubject       string        `env:"KAFKA_SAGA_AUTH_CREATE_TOPIC" envDefault:"saga.auth.create_pending_registration"`
