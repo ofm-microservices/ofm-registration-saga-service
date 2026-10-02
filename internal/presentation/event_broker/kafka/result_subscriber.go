@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"registration-saga-service/config"
@@ -66,7 +67,34 @@ func (s *resultSubscriber) Subscribe(ctx context.Context) error {
 		go func(t struct {
 			topic   string
 			handler eventbroker.MessageHandler
-		}) { _ = s.broker.RunPullConsumer(ctx, config.PullConsumerConfig{Subject: t.topic}, t.handler) }(t)
+		}) {
+			backoff := time.Second
+			for ctx.Err() == nil {
+				err := s.broker.RunPullConsumer(ctx, config.PullConsumerConfig{Subject: t.topic}, t.handler)
+				if ctx.Err() != nil {
+					return
+				}
+				if err != nil {
+					s.log.Error("registration result Kafka consumer stopped; retrying",
+						logging.String("topic", t.topic),
+						logging.String("backoff", backoff.String()),
+						logging.Err(err))
+				}
+				timer := time.NewTimer(backoff)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				if backoff < 30*time.Second {
+					backoff *= 2
+					if backoff > 30*time.Second {
+						backoff = 30 * time.Second
+					}
+				}
+			}
+		}(t)
 	}
 	s.log.Info("registration result Kafka consumers ready")
 	return nil
@@ -76,19 +104,37 @@ func (s *resultSubscriber) user(ctx context.Context, _ string, p []byte) error {
 	if err := json.Unmarshal(p, &r); err != nil {
 		return err
 	}
-	return s.service.HandleUserCreateResult(ctx, app.UserCreateResult(r))
+	err := s.service.HandleUserCreateResult(ctx, app.UserCreateResult(r))
+	if err != nil {
+		s.log.Error("user result handler failed", logging.String("session_id", r.SessionID), logging.Err(err))
+	} else {
+		s.log.Info("user result handled", logging.String("session_id", r.SessionID), logging.String("status", r.Status))
+	}
+	return err
 }
 func (s *resultSubscriber) auth(ctx context.Context, _ string, p []byte) error {
 	var r authCreateResult
 	if err := json.Unmarshal(p, &r); err != nil {
 		return err
 	}
-	return s.service.HandleAuthCreatePendingResult(ctx, app.AuthCreatePendingResult(r))
+	err := s.service.HandleAuthCreatePendingResult(ctx, app.AuthCreatePendingResult(r))
+	if err != nil {
+		s.log.Error("auth result handler failed", logging.String("session_id", r.SessionID), logging.Err(err))
+	} else {
+		s.log.Info("auth result handled", logging.String("session_id", r.SessionID), logging.String("status", r.Status))
+	}
+	return err
 }
 func (s *resultSubscriber) mail(ctx context.Context, _ string, p []byte) error {
 	var r mailSendResult
 	if err := json.Unmarshal(p, &r); err != nil {
 		return err
 	}
-	return s.service.HandleMailSendResult(ctx, app.MailSendResult(r))
+	err := s.service.HandleMailSendResult(ctx, app.MailSendResult(r))
+	if err != nil {
+		s.log.Error("mail result handler failed", logging.String("session_id", r.SessionID), logging.Err(err))
+	} else {
+		s.log.Info("mail result handled", logging.String("session_id", r.SessionID), logging.String("status", r.Status))
+	}
+	return err
 }

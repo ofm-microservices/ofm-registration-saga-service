@@ -8,6 +8,7 @@ import (
 	eventbroker "registration-saga-service/internal/presentation/event_broker"
 	events "registration-saga-service/internal/presentation/event_broker/kafka"
 	grpcserver "registration-saga-service/internal/presentation/grpc"
+	"time"
 
 	"go.uber.org/fx"
 )
@@ -18,13 +19,49 @@ var PresentationModule = fx.Options(
 		ProvideAuthAvailabilityChecker,
 		ProvideUserAvailabilityChecker,
 		ProvideResultSubscriber,
+		ProvideRecoverySubscriber,
 		ProvideGRPCServer,
 	),
 	fx.Invoke(
 		InvokeSubscribeResults,
+		InvokeSubscribeRecovery,
 		InvokeRunGRPCServer,
 	),
 )
+
+// ProvideRecoverySubscriber constructs the registration-owned migration consumer.
+func ProvideRecoverySubscriber(broker app.EventBroker, svc app.RegistrationService, cfg *config.Config, lg logging.Logger) (events.RecoverySubscriber, error) {
+	return events.NewRecoverySubscriber(broker, svc, cfg.Kafka, lg)
+}
+
+// InvokeSubscribeRecovery starts registration recovery consumption during startup.
+func InvokeSubscribeRecovery(lc fx.Lifecycle, sub events.RecoverySubscriber, lg logging.Logger) {
+	var cancel context.CancelFunc
+	lc.Append(fx.Hook{OnStart: func(context.Context) error {
+		ctx, stop := context.WithCancel(context.Background())
+		cancel = stop
+		go func() {
+			for ctx.Err() == nil {
+				if err := sub.Subscribe(ctx); err != nil && ctx.Err() == nil {
+					lg.Error("registration recovery consumer stopped; retrying", logging.Err(err))
+					timer := time.NewTimer(time.Second)
+					select {
+					case <-ctx.Done():
+						timer.Stop()
+						return
+					case <-timer.C:
+					}
+				}
+			}
+		}()
+		return nil
+	}, OnStop: func(context.Context) error {
+		if cancel != nil {
+			cancel()
+		}
+		return nil
+	}})
+}
 
 // ProvideResultSubscriber constructs the result-consumer adapter for saga
 // progress events.

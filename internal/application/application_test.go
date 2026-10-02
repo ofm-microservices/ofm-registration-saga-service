@@ -132,6 +132,22 @@ var _ = Describe("RegistrationService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(parsed.Version()).To(Equal(uuid.Version(7)))
 		})
+
+		It("preserves recovery session and user identities", func() {
+			input, err := normalizeStartInput(domain.StartRegistrationParams{
+				SessionID: "01h00000000000000000000001",
+				UserID:    "01h00000000000000000000002",
+				ClientID:  "01h00000000000000000000003",
+				Email:     "alex@example.com",
+				Username:  "alex",
+				Password:  "password123",
+			})
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(input.sessionID).To(Equal("01h00000000000000000000001"))
+			Expect(input.userID).To(Equal("01h00000000000000000000002"))
+			Expect(input.clientID).To(Equal("01h00000000000000000000003"))
+		})
 	})
 
 	Describe("lookupStartConflict", func() {
