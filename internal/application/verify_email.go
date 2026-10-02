@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	commonrealtime "github.com/ofm-microservices/ofm-common/pkg/realtime"
 	"registration-saga-service/internal/domain"
 )
 
@@ -147,6 +148,7 @@ func (s *registrationService) completeEmailVerification(ctx context.Context, ses
 	if err := s.broker.Publish(ctx, s.cfg.RegistrationCompletedSubject, payload); err != nil {
 		s.log.Error("publish registration completed event failed", logging.String("session_id", session.SessionID), logging.Err(err))
 	}
+	s.publishRegistrationNotification(ctx, session, "registration.completed", commonrealtime.StatusCompleted, "", nil, payload)
 }
 
 func (s *registrationService) failEmailVerification(ctx context.Context, session domain.Session, stepKey, message string, err error) {
@@ -168,4 +170,5 @@ func (s *registrationService) failEmailVerification(ctx context.Context, session
 	if pubErr := s.broker.Publish(ctx, s.cfg.RegistrationFailedSubject, payload); pubErr != nil {
 		s.log.Error("publish registration failed event failed", logging.String("session_id", session.SessionID), logging.Err(pubErr))
 	}
+	s.publishRegistrationNotification(ctx, session, "registration.failed", commonrealtime.StatusFailed, registrationErrorCode(err.Error()), boolPtr(false), payload)
 }

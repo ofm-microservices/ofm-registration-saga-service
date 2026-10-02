@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	transportgrpc "github.com/ofm-microservices/ofm-common/pkg/observability/grpc"
 	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
 	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"net"
@@ -37,7 +38,7 @@ func NewServer(svc RegistrationService, cfg config.GRPCConfig, log Logger) (Serv
 
 	grpcSrv := grpc.NewServer(
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.UnaryInterceptor(metrics.UnaryServerInterceptor()),
+		grpc.ChainUnaryInterceptor(metrics.UnaryServerInterceptor(), transportgrpc.UnaryServerInterceptor(log)),
 	)
 	s := &server{
 		svc:  svc,

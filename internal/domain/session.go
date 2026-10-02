@@ -75,7 +75,9 @@ type Step struct {
 
 // StartRegistrationParams is the input accepted by the registration use case.
 type StartRegistrationParams struct {
+	SessionID string
 	ClientID  string
+	UserID    string
 	Email     string
 	Username  string
 	Password  string
