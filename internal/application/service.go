@@ -4,22 +4,32 @@ import (
 	"context"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	"github.com/ofm-microservices/ofm-common/pkg/observability/metrics"
+	commonrealtime "github.com/ofm-microservices/ofm-common/pkg/realtime"
 	"registration-saga-service/config"
 	"registration-saga-service/internal/domain"
+	"sync"
 	"time"
 )
 
 const registrationSagaMetricName = "registration"
 
 type registrationService struct {
-	sessions        SessionRepository
-	steps           StepRepository
-	broker          EventBroker
-	emailChecker    EmailAvailabilityChecker
-	usernameChecker UsernameAvailabilityChecker
-	mapr            RegistrationMessageMapper
-	cfg             config.NATSConfig
-	log             logging.Logger
+	sessions         SessionRepository
+	steps            StepRepository
+	broker           EventBroker
+	realtime         RealtimePublisher
+	emailChecker     EmailAvailabilityChecker
+	usernameChecker  UsernameAvailabilityChecker
+	mapr             RegistrationMessageMapper
+	cfg              config.NATSConfig
+	log              logging.Logger
+	codeSentNotified sync.Map
+}
+
+// RealtimePublisher is an optional transport capability used only by the
+// concrete broker wiring to fan out client-visible registration outcomes.
+type RealtimePublisher interface {
+	PublishRealtime(ctx context.Context, payload []byte) error
 }
 
 // New constructs the registration application service that owns saga-session
@@ -52,10 +62,15 @@ func New(
 		return nil, ErrNilLogger
 	}
 
+	var realtime RealtimePublisher
+	if publisher, ok := broker.(RealtimePublisher); ok {
+		realtime = publisher
+	}
 	return &registrationService{
 		sessions:        sessions,
 		steps:           steps,
 		broker:          broker,
+		realtime:        realtime,
 		emailChecker:    emailChecker,
 		usernameChecker: usernameChecker,
 		mapr:            newRegistrationMessageMapper(),
@@ -146,7 +161,10 @@ func (s *registrationService) HandleUserCreateResult(ctx context.Context, result
 		return s.compensateRegistrationFailure(ctx, result.SessionID, result.UserID, result.Error)
 	}
 
-	return s.syncSessionStatus(ctx, result.SessionID)
+	if err := s.syncSessionStatus(ctx, result.SessionID); err != nil {
+		return err
+	}
+	return s.publishCodeSentIfReady(ctx, result.SessionID, nil)
 }
 
 // HandleAuthCreatePendingResult records the auth outcome and activates the mail
@@ -184,7 +202,10 @@ func (s *registrationService) HandleAuthCreatePendingResult(ctx context.Context,
 		return err
 	}
 
-	return s.syncSessionStatus(ctx, result.SessionID)
+	if err := s.syncSessionStatus(ctx, result.SessionID); err != nil {
+		return err
+	}
+	return s.publishCodeSentIfReady(ctx, result.SessionID, nil)
 }
 
 // HandleMailSendResult records the mail outcome and emits the user-facing
@@ -225,27 +246,72 @@ func (s *registrationService) HandleMailSendResult(ctx context.Context, result M
 		metricStatus = "error"
 		return err
 	}
+	if err := s.syncSessionStatus(ctx, result.SessionID); err != nil {
+		metricStatus = "error"
+		return err
+	}
+	return s.publishCodeSentIfReady(ctx, result.SessionID, payload)
+}
 
-	return s.syncSessionStatus(ctx, result.SessionID)
+func (s *registrationService) publishCodeSentIfReady(ctx context.Context, sessionID string, payload []byte) error {
+	if s.realtime == nil {
+		return nil
+	}
+	session, err := s.sessions.GetByID(ctx, sessionID)
+	if err != nil || session.Status != domain.SessionStatusCodeSent {
+		return err
+	}
+	if _, loaded := s.codeSentNotified.LoadOrStore(sessionID, struct{}{}); loaded {
+		return nil
+	}
+	s.publishRegistrationNotification(ctx, *session, "registration.code_sent", commonrealtime.StatusAccepted, "", nil, payload)
+	return nil
 }
 
 func (s *registrationService) syncSessionStatus(ctx context.Context, sessionID string) error {
-	steps, err := s.steps.ListBySessionID(ctx, sessionID)
-	if err != nil {
-		return err
-	}
-
-	allCompleted := true
-	for _, step := range steps {
-		if step.Status == domain.StepStatusFailed {
+	if reconciler, ok := s.sessions.(interface {
+		ReconcileStatus(context.Context, string) (string, error)
+	}); ok {
+		status, err := reconciler.ReconcileStatus(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+		if status == domain.SessionStatusFailed {
 			return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
 		}
-		if step.Status != domain.StepStatusCompleted {
-			allCompleted = false
-		}
-	}
-	if !allCompleted {
 		return nil
+	}
+
+	// Result events are consumed serially. Reconcile briefly so a replica can
+	// expose the just-written step, but never block the consumer for seconds;
+	// the next result event will retry the reconciliation.
+	for attempt := 0; attempt < 3; attempt++ {
+		steps, err := s.steps.ListBySessionID(ctx, sessionID)
+		if err != nil {
+			return err
+		}
+
+		allCompleted := true
+		for _, step := range steps {
+			if step.Status == domain.StepStatusFailed {
+				return s.compensateRegistrationFailure(ctx, sessionID, "", "registration step failed")
+			}
+			if step.Status != domain.StepStatusCompleted {
+				allCompleted = false
+			}
+		}
+		if allCompleted {
+			s.log.Info("registration steps reconciled",
+				logging.Operation("registration.saga.reconcile"),
+				logging.String("session_id", sessionID),
+				logging.Int("attempt", attempt+1),
+			)
+			break
+		}
+		if attempt == 2 {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	if err := s.sessions.UpdateStatus(ctx, sessionID, domain.SessionStatusCodeSent); err != nil {
@@ -364,6 +430,7 @@ func (s *registrationService) compensateRegistrationFailure(ctx context.Context,
 		)
 		metrics.Global().IncSagaCompensationFailed(registrationSagaMetricName)
 	}
+	s.publishRegistrationNotification(ctx, *session, "registration.failed", commonrealtime.StatusFailed, registrationErrorCode(reason), boolPtr(true), payload)
 	metrics.Global().IncSagaFailed(registrationSagaMetricName)
 	metrics.Global().IncSagaCompensationCompleted(registrationSagaMetricName)
 	metrics.Global().SetSagaActiveSessions(registrationSagaMetricName, 0)

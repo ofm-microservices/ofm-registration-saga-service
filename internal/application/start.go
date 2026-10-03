@@ -10,20 +10,24 @@ import (
 )
 
 type startInput struct {
+	sessionID string
 	email     string
 	username  string
 	password  string
 	clientID  string
+	userID    string
 	firstName string
 	surname   string
 }
 
 func normalizeStartInput(params domain.StartRegistrationParams) (startInput, error) {
 	input := startInput{
+		sessionID: strings.TrimSpace(params.SessionID),
 		email:     strings.TrimSpace(params.Email),
 		username:  strings.TrimSpace(params.Username),
 		password:  strings.TrimSpace(params.Password),
 		clientID:  strings.TrimSpace(params.ClientID),
+		userID:    strings.TrimSpace(params.UserID),
 		firstName: strings.TrimSpace(params.FirstName),
 		surname:   strings.TrimSpace(params.Surname),
 	}
@@ -58,12 +62,18 @@ func (s *registrationService) lookupStartConflict(ctx context.Context, email, us
 
 func (s *registrationService) createStartSession(ctx context.Context, input startInput) (domain.Session, error) {
 	session := domain.Session{
-		SessionID: uuid.Must(uuid.NewV7()).String(),
+		SessionID: input.sessionID,
 		ClientID:  input.clientID,
-		UserID:    uuid.Must(uuid.NewV7()).String(),
+		UserID:    input.userID,
 		Email:     input.email,
 		Username:  input.username,
 		Status:    domain.SessionStatusStarted,
+	}
+	if session.SessionID == "" {
+		session.SessionID = uuid.Must(uuid.NewV7()).String()
+	}
+	if session.UserID == "" {
+		session.UserID = uuid.Must(uuid.NewV7()).String()
 	}
 
 	created, err := s.sessions.Create(ctx, session)

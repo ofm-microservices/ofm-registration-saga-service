@@ -91,6 +91,12 @@ func (b *natsBroker) Publish(ctx context.Context, subject string, payload []byte
 	return nil
 }
 
+// PublishRealtime publishes a client-visible notification to the shared
+// realtime fanout subject without exposing that subject to application code.
+func (b *natsBroker) PublishRealtime(ctx context.Context, payload []byte) error {
+	return b.Publish(ctx, "realtime", payload)
+}
+
 // Subscribe registers a push-based NATS subscription for the supplied subject.
 func (b *natsBroker) Subscribe(ctx context.Context, subject string, handler eventbroker.MessageHandler) error {
 	b.log.Info("subscribing to subject",

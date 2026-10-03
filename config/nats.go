@@ -2,10 +2,10 @@ package config
 
 import "time"
 
-// NATSConfig defines the command, result, and consumer settings used for the
-// registration saga's event-driven orchestration.
+// NATSConfig is retained solely for compatibility with legacy adapters and
+// configuration tests; production registration wiring uses KafkaConfig.
 type NATSConfig struct {
-	URL                            string        `env:"NATS_URL,required"`
+	URL                            string        `env:"NATS_URL"`
 	User                           string        `env:"NATS_USER"`
 	Password                       string        `env:"NATS_PASSWORD"`
 	RegistrationEventsStream       string        `env:"NATS_STREAM_REGISTRATION_EVENTS" envDefault:"REGISTRATION_EVENTS"`

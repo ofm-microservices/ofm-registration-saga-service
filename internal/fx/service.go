@@ -23,5 +23,12 @@ func ProvideRegistrationService(
 	cfg *config.Config,
 	lg logging.Logger,
 ) (app.RegistrationService, error) {
-	return app.New(sessions, steps, broker, emailChecker, usernameChecker, cfg.NATS, lg)
+	legacyCfg := config.NATSConfig{
+		RegistrationCodeSentSubject:  cfg.Kafka.RegistrationCodeSentSubject,
+		RegistrationCompletedSubject: cfg.Kafka.RegistrationCompletedSubject,
+		RegistrationFailedSubject:    cfg.Kafka.RegistrationFailedSubject,
+		UserCreateSubject:            cfg.Kafka.UserCreateSubject,
+		AuthCreatePendingSubject:     cfg.Kafka.AuthCreatePendingSubject,
+	}
+	return app.New(sessions, steps, broker, emailChecker, usernameChecker, legacyCfg, lg)
 }

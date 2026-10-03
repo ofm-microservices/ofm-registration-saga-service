@@ -1,6 +1,7 @@
 package grpc
 
 import (
+	"errors"
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
 	registrationv1 "github.com/ofm-microservices/ofm-common/proto/registration/v1"
 	"registration-saga-service/internal/domain"
@@ -66,24 +67,26 @@ func (m *registrationMapper) ToRegistrationStatusResponse(result *domain.Registr
 }
 
 func (m *registrationMapper) ToStartError(err error) error {
-	switch err {
-	case domain.ErrInvalidSessionID:
+	switch {
+	case errors.Is(err, domain.ErrInvalidSessionID):
 		return status.Error(codes.InvalidArgument, "invalid session id")
-	case domain.ErrInvalidClientID:
+	case errors.Is(err, domain.ErrInvalidClientID):
 		return status.Error(codes.InvalidArgument, "invalid client id")
-	case domain.ErrInvalidVerificationCode:
+	case errors.Is(err, domain.ErrInvalidVerificationCode):
 		return status.Error(codes.InvalidArgument, "invalid verification code")
-	case domain.ErrInvalidEmail:
+	case errors.Is(err, domain.ErrInvalidEmail):
 		return status.Error(codes.InvalidArgument, "invalid email")
-	case domain.ErrInvalidUsername:
+	case errors.Is(err, domain.ErrInvalidUsername):
 		return status.Error(codes.InvalidArgument, "invalid username")
-	case domain.ErrInvalidPassword:
+	case errors.Is(err, domain.ErrInvalidPassword):
 		return status.Error(codes.InvalidArgument, "invalid password")
-	case domain.ErrSessionNotFound:
+	case errors.Is(err, domain.ErrSessionNotFound):
 		return status.Error(codes.NotFound, "registration session not found")
-	case domain.ErrClientMismatch:
+	case errors.Is(err, domain.ErrClientMismatch):
 		return status.Error(codes.PermissionDenied, "registration client mismatch")
-	case domain.ErrInvalidStatus:
+	case errors.Is(err, domain.ErrInvalidStatus):
+		m.log.Warn("registration request returned a business condition",
+			logging.Operation("grpc.registration.map_error"), logging.Retryable(false), logging.Err(err))
 		return status.Error(codes.FailedPrecondition, "registration is not ready for this operation")
 	default:
 		m.log.Error("registration request failed",

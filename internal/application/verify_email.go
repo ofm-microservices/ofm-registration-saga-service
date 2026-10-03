@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/ofm-microservices/ofm-common/pkg/logging"
+	commonrealtime "github.com/ofm-microservices/ofm-common/pkg/realtime"
 	"registration-saga-service/internal/domain"
 )
 
@@ -33,6 +35,17 @@ func (s *registrationService) VerifyEmail(ctx context.Context, params domain.Ver
 	}
 	if session.Status == domain.SessionStatusCompleted {
 		return &domain.VerifyEmailResult{SessionID: session.SessionID, ClientID: session.ClientID, Status: session.Status}, nil
+	}
+	if session.Status == domain.SessionStatusInProgress {
+		// The result consumer may still be converging the three initial steps.
+		// Reconcile on the request path as a final read-after-write guard.
+		if err := s.syncSessionStatus(ctx, session.SessionID); err != nil {
+			return nil, err
+		}
+		session, err = s.sessions.GetByID(ctx, session.SessionID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	if session.Status != domain.SessionStatusCodeSent {
 		return nil, domain.ErrInvalidStatus
@@ -135,10 +148,15 @@ func (s *registrationService) completeEmailVerification(ctx context.Context, ses
 	if err := s.broker.Publish(ctx, s.cfg.RegistrationCompletedSubject, payload); err != nil {
 		s.log.Error("publish registration completed event failed", logging.String("session_id", session.SessionID), logging.Err(err))
 	}
+	s.publishRegistrationNotification(ctx, session, "registration.completed", commonrealtime.StatusCompleted, "", nil, payload)
 }
 
 func (s *registrationService) failEmailVerification(ctx context.Context, session domain.Session, stepKey, message string, err error) {
-	s.log.Error(message, logging.String("session_id", session.SessionID), logging.Err(err))
+	if errors.Is(err, domain.ErrInvalidStatus) || errors.Is(err, domain.ErrInvalidVerificationCode) {
+		s.log.Warn(message, logging.String("session_id", session.SessionID), logging.Err(err))
+	} else {
+		s.log.Error(message, logging.String("session_id", session.SessionID), logging.Err(err))
+	}
 	_ = s.steps.UpdateStatus(ctx, session.SessionID, stepKey, domain.StepStatusFailed)
 	_ = s.sessions.UpdateStatus(ctx, session.SessionID, domain.SessionStatusFailed)
 	_ = s.usernameChecker.DeactivateUser(ctx, session.UserID)
@@ -152,4 +170,5 @@ func (s *registrationService) failEmailVerification(ctx context.Context, session
 	if pubErr := s.broker.Publish(ctx, s.cfg.RegistrationFailedSubject, payload); pubErr != nil {
 		s.log.Error("publish registration failed event failed", logging.String("session_id", session.SessionID), logging.Err(pubErr))
 	}
+	s.publishRegistrationNotification(ctx, session, "registration.failed", commonrealtime.StatusFailed, registrationErrorCode(err.Error()), boolPtr(false), payload)
 }
